@@ -1,0 +1,34 @@
+#include "analyzeHyperonConfig.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "particleinventoryservice.fcl"
+
+process_name: AnalyzeEvents
+
+source:
+{
+  module_type:   RootInput
+  maxEvents: -1
+  fileNames: ["/data/sbnd/hyperons/filtered_lambda_reco2_1.root","/data/sbnd/hyperons/filtered_lambda_reco2_2.root", "/data/sbnd/hyperons/filtered_lambda_reco2_3.root","/data/sbnd/hyperons/filtered_lambda_reco2_4.root","/data/sbnd/hyperons/filtered_lambda_reco2_5.root","/data/sbnd/hyperons/filtered_lambda_reco2_6.root","/data/sbnd/hyperons/filtered_lambda_reco2_7.root"]
+}
+
+services:
+{
+  TFileService:  { fileName: "background.root"}
+  @table::sbnd_services
+  ParticleInventoryService: @local::sbnd_particleinventoryservice
+  BackTrackerService:       @local::sbnd_backtrackerservice
+}
+
+
+physics:
+{
+  analyzers:
+  {
+     ana: @local::analyzeEvents
+  }
+
+  path0: [ ana ]
+  end_paths: [ path0 ]
+}
+
+services.BackTrackerService.BackTracker.SimChannelModuleLabel: "simdrift"
