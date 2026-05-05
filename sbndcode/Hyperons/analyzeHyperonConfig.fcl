@@ -1,0 +1,18 @@
+BEGIN_PROLOG
+
+analyzeEvents:
+{
+  module_type: "AnalyzeHyperon"
+  GenieGenModuleLabel:  "generator"
+  SliceLabel: "pandora"
+  HitLabel: "gaushit"
+  PFParticleLabel: "pandora"
+  TrackLabel: "pandoraTrack"
+  CalorimetryLabel: "pandoraCalo"
+  ShowerLabel: "pandoraShowerSBN"
+  OpT0FinderLabel: "opt0finder"
+  ClusterLabel: "pandoraSCE"
+  BadFilesOutput: "bad_files.txt" 
+}
+
+END_PROLOG
