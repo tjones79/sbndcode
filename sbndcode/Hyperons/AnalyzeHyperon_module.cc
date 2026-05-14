@@ -81,6 +81,7 @@ namespace hyperon {
         // All particle vertices
         std::vector<int>   fTruePartPDG;
         std::vector<int>   fTruePartMother;
+        std::vector<int>   fTruePartTrackID;
         std::vector<float> fTruePartStartX;
         std::vector<float> fTruePartStartY;
         std::vector<float> fTruePartStartZ;
@@ -89,6 +90,7 @@ namespace hyperon {
         std::string fSliceLabel = "pandora";
         std::string fPFParticleLabel = "pandora";
         std::string fTrackLabel = "pandoraTrack";
+        std::string fCrumbsLabel = "crumbs";
 
         // Reco Tree Variables
         int fNSlices;
@@ -105,9 +107,20 @@ namespace hyperon {
 
         // True track stuff
         std::vector<int> fNuTrackTruePDG;
+        std::vector<int> fNuTrackTrueMotherTrackID;
+        std::vector<int> fNuTrackTrueID;
+
+        std::vector<float> fSliceVertexX;
+        std::vector<float> fSliceVertexY;
+        std::vector<float> fSliceVertexZ;
 
         // Simple tag for true neutrino slice
         bool fHasTrueNuSlice;
+
+        std::vector<int> fSliceIsTrueNeutrino;
+
+
+        std::vector<float> SliceCRUMBSScore;
 
         
     };
@@ -131,6 +144,7 @@ namespace hyperon {
         // All particle
         fTree->Branch("TruePartPDG", &fTruePartPDG);
         fTree->Branch("TruePartMother", &fTruePartMother);
+        fTree->Branch("TruePartTrackID", &fTruePartTrackID);
         fTree->Branch("TruePartStartX", &fTruePartStartX);
         fTree->Branch("TruePartStartY", &fTruePartStartY);
         fTree->Branch("TruePartStartZ", &fTruePartStartZ);
@@ -150,9 +164,20 @@ namespace hyperon {
 
         // True track stuff
         fTree->Branch("NuTrackTruePDG", &fNuTrackTruePDG);
+        fTree->Branch("NuTrackTrueMotherTrackID", &fNuTrackTrueMotherTrackID);
+        fTree->Branch("NuTrackTrueID", &fNuTrackTrueID);
+
+        fTree->Branch("SliceVertexX", &fSliceVertexX);
+        fTree->Branch("SliceVertexY", &fSliceVertexY);
+        fTree->Branch("SliceVertexZ", &fSliceVertexZ);
+
 
         // Simple truth tag for slice
         fTree->Branch("HasTrueNuSlice", &fHasTrueNuSlice, "HasTrueNuSlice/O");
+        fTree->Branch("SliceIsTrueNeutrino",&fSliceIsTrueNeutrino);
+
+        // CRUMBS
+        fTree->Branch("SliceCRUMBSScore", &SliceCRUMBSScore);
         
     }
 
@@ -162,6 +187,7 @@ namespace hyperon {
         // Cleanup
         fTruePartPDG.clear();
         fTruePartMother.clear();
+        fTruePartTrackID.clear();
         fTruePartStartX.clear();
         fTruePartStartY.clear();
         fTruePartStartZ.clear();
@@ -178,8 +204,17 @@ namespace hyperon {
         fNTracks = 0;
 
         fNuTrackTruePDG.clear();
+        fNuTrackTrueID.clear();
+        fNuTrackTrueMotherTrackID.clear();
 
         fHasTrueNuSlice = false;
+        fSliceIsTrueNeutrino.clear();
+
+        fSliceVertexX.clear();
+        fSliceVertexY.clear();
+        fSliceVertexZ.clear();
+
+        SliceCRUMBSScore.clear();
 
         fRun = e.run();
         fEvent = e.event();
@@ -222,6 +257,7 @@ namespace hyperon {
                 
                 fTruePartPDG.push_back(particle.PdgCode());
                 fTruePartMother.push_back(particle.Mother());
+                fTruePartTrackID.push_back(particle.TrackId());
                 
                 // particle.Vx() gives the starting position of this specific track
                 fTruePartStartX.push_back(particle.Vx());
@@ -258,6 +294,12 @@ namespace hyperon {
             art::FindManyP<recob::Track> pfpToTrack(pfpHandle, e, fTrackLabel);
             // "Give me all the Hits that make up this Track"
             art::FindManyP<recob::Hit> trackToHit(trackHandle, e, fTrackLabel);
+            // Give me all the vertices associated with this pfp
+            art::FindManyP<recob::Vertex> pfpToVertex(pfpHandle, e, fPFParticleLabel);
+            // Give me all the hits associated with this slice.
+            art::FindManyP<recob::Hit> sliceToHit(sliceHandle, e, fSliceLabel);
+
+            art::FindManyP<sbn::CRUMBSResult> fmCrumbs(sliceHandle, e, fCrumbsLabel);
 
             // slice loop
             for (size_t i_slice = 0; i_slice < sliceHandle->size(); ++i_slice) {
@@ -267,9 +309,22 @@ namespace hyperon {
                 
                 bool isNeutrinoSlice = false;
 
-                // Find parrent and check if it is a neutrino
+                // Find parent and check if it is a neutrino
                 for (const art::Ptr<recob::PFParticle>& pfp : sliceParticles) {
                     
+                    float crumbs_score = -999.0;
+                    if (fmCrumbs.isValid()){
+
+                        std::cout<<"CRUMBS Association is valid!!"<<std::endl;
+                    }
+                    if (fmCrumbs.at(i_slice).size() > 0){
+
+                        std::cout<<"There are crumbs scores for these slices!!!"<<std::endl;
+                    }
+                    if (fmCrumbs.isValid() && fmCrumbs.at(i_slice).size() > 0) {
+                        crumbs_score = fmCrumbs.at(i_slice).front()->score;
+                    }
+                    SliceCRUMBSScore.push_back(crumbs_score);
                     if (pfp->IsPrimary()) {
                         
                         // Pandora's guess
@@ -288,8 +343,45 @@ namespace hyperon {
                         
                         fSliceNuScore.push_back(nuScore);
 
+                        std::vector<art::Ptr<recob::Vertex>> vertices = pfpToVertex.at(pfp.key());
+
+                        if (!vertices.empty()) {
+                            fSliceVertexX.push_back(vertices.front()->position().X());
+                            fSliceVertexY.push_back(vertices.front()->position().Y());
+                            fSliceVertexZ.push_back(vertices.front()->position().Z());
+                        } else {
+                            // If Pandora failed to make a vertex, use a dummy value
+                            fSliceVertexX.push_back(-9999.0);
+                            fSliceVertexY.push_back(-9999.0);
+                            fSliceVertexZ.push_back(-9999.0);
+                        }
+
+                        int isTrueNu = 0;
+                        
+                        // Get all hits in this specific slice
+                        std::vector<art::Ptr<recob::Hit>> sliceHits = sliceToHit.at(i_slice);
+                        
+                        // Ask BackTracker for the Geant4 ID that contributed the most hits
+                        int g4id = TruthMatchUtils::TrueParticleIDFromTotalRecoHits(clockData, sliceHits, 1);
+
+                        // If a valid particle won the election
+                        if (TruthMatchUtils::Valid(g4id)) {
+                            // Trace it back to the event generator
+                            const art::Ptr<simb::MCTruth> truth = pi_serv->TrackIdToMCTruth_P(g4id);
+                            
+                            if (truth.isNonnull()) {
+                                // Was it generated as a beam neutrino?
+                                if (truth->Origin() == simb::kBeamNeutrino) {
+                                    isTrueNu = 1;
+                                }
+                            }
+                        }
+                        
+                        fSliceIsTrueNeutrino.push_back(isTrueNu);
+
+
                         // Flag slice
-                        if (abs(pfp->PdgCode()) == 14) {
+                        if (pfp->PdgCode()== 14 || pfp->PdgCode() == 12) {
 
                             isNeutrinoSlice = true;
 
@@ -317,10 +409,13 @@ namespace hyperon {
                             fNuTrackStartY.push_back(track->Vertex().Y());
                             fNuTrackStartZ.push_back(track->Vertex().Z());
                             fNuTrackLength.push_back(track->Length());
+                            // Only fill NTracks when slice is neutrino
                             fNTracks++;
 
                             // Back tracker
                             int truePDG = 0;
+                            int trueMotherTrackID = 0;
+                            int trueTrackID = 0;
                             std::vector<art::Ptr<recob::Hit>> trackHits = trackToHit.at(track.key());
 
                             // Dom's utility
@@ -333,10 +428,15 @@ namespace hyperon {
                                 
                                 if (matched_mcparticle) {
                                     truePDG = matched_mcparticle->PdgCode();
+                                    trueMotherTrackID = matched_mcparticle->Mother();
+                                    trueTrackID = matched_mcparticle->TrackId();
+
                                 }
                             }
             
                             fNuTrackTruePDG.push_back(truePDG);
+                            fNuTrackTrueMotherTrackID.push_back(trueMotherTrackID);
+                            fNuTrackTrueID.push_back(trueTrackID);
 
                         }
 

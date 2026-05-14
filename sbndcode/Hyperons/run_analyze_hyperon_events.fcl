@@ -28,6 +28,7 @@ physics:
   }
 
   path0: [ ana ]
+
   end_paths: [ path0 ]
 }
 
