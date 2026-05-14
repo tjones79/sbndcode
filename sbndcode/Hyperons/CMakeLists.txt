@@ -44,7 +44,6 @@ set(
   )
 
 find_package(cetmodules REQUIRED)
-cet_build_plugin(AnalyzeEvents art::Module IMPL_SOURCE AnalyzeEvents_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(AnalyzeHyperon art::Module IMPL_SOURCE AnalyzeHyperon_module.cc LIBRARIES ${MODULE_LIBRARIES})
 
 install_headers()
