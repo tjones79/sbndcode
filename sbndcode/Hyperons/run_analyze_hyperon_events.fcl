@@ -1,6 +1,7 @@
 #include "analyzeHyperonConfig.fcl"
 #include "simulationservices_sbnd.fcl"
 #include "particleinventoryservice.fcl"
+#include "crumbs_sbnd.fcl"
 
 process_name: AnalyzeEvents
 
@@ -22,12 +23,21 @@ services:
 
 physics:
 {
+
+  producers:
+  {
+    crumbs: @local::crumbs_sbnd
+  }
+
   analyzers:
   {
      ana: @local::analyzeEvents
   }
 
+  reco: [ crumbs ]
   path0: [ ana ]
+
+  trigger_paths: [ reco ]
 
   end_paths: [ path0 ]
 }
