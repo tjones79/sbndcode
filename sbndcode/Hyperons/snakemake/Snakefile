@@ -1,0 +1,156 @@
+import glob
+import os
+import sys
+
+# --- Load Configuration ---
+try:
+    SIG_INPUT = os.environ["HYPERON_SIG_INPUT"]
+    BG_INPUT = os.environ["HYPERON_BG_INPUT"]
+    SIG_OUTPUT_DIR = os.environ["HYPERON_SIG_OUTPUT"]
+    BG_OUTPUT_DIR = os.environ["HYPERON_BG_OUTPUT"]
+    
+    WORK_DIR = os.environ["HYPERON_WORK_DIR"]
+    CONTAINER = os.environ["CONTAINER_IMAGE"]
+    APPTAINER_BIN = os.environ["APPTAINER_BIN"]
+except KeyError as e:
+    print(f"FATAL ERROR: Missing environment variable {e}.")
+    sys.exit(1)
+
+# --- Glob the Files ---
+sig_files = glob.glob(f"{SIG_INPUT}/*.root")
+bg_files = glob.glob(f"{BG_INPUT}/*.root")
+
+# --- Build the Mapping Dictionary ---
+BG_FILE_MAP = {}
+for file_path in bg_files:
+    basename = os.path.splitext(os.path.basename(file_path))[0]
+    BG_FILE_MAP[basename] = file_path
+
+if not BG_FILE_MAP:
+    print("Warning: No files found for background")
+
+# --- Build the Mapping Dictionary ---
+SIG_FILE_MAP = {}
+for file_path in sig_files:
+    basename = os.path.splitext(os.path.basename(file_path))[0]
+    SIG_FILE_MAP[basename] = file_path
+
+if not SIG_FILE_MAP:
+    print("Warning: No files found for signal")
+
+# Extract just the keys (the wildcards) for the target rule
+SIG_SAMPLES = list(SIG_FILE_MAP.keys())
+BG_SAMPLES = list(BG_FILE_MAP.keys())
+
+
+# ==========================================
+# Helper functions
+# ==========================================
+def get_input_filepath(wildcards):
+    
+    if wildcards.out_dir == BG_OUTPUT_DIR:
+        return BG_FILE_MAP[wildcards.sample]
+    elif wildcards.out_dir == SIG_OUTPUT_DIR:
+        return SIG_FILE_MAP[wildcards.sample]
+    else:
+        raise ValueError(f"Unknown target directory: {wildcards.out_dir}")
+
+def get_hadd_inputs(wildcards):
+    if wildcards.dataset == "background":
+        return expand(f"{BG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=BG_SAMPLES)
+    elif wildcards.dataset == "signal":
+        return expand(f"{SIG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=SIG_SAMPLES)
+    else:
+        raise ValueError(f"Unknown dataset for merging: {wildcards.dataset}")
+
+
+# --- All Target Rule ---
+rule all:
+    input:
+        # Processing
+        expand(f"{{out_dir}}/analyser_output_{{sample}}.root", sample=BG_SAMPLES, out_dir=BG_OUTPUT_DIR),
+        expand(f"{{out_dir}}/analyser_output_{{sample}}.root", sample=SIG_SAMPLES, out_dir=SIG_OUTPUT_DIR),
+        # Merging
+        f"{BG_OUTPUT_DIR}/merged_background.root",
+        f"{SIG_OUTPUT_DIR}/merged_signal.root"
+        
+
+# --- Background-Only Target ---
+rule background:
+    input:
+        expand(f"{BG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=BG_SAMPLES),
+        expand(f"{{out_dir}}/merged_background.root", out_dir=BG_OUTPUT_DIR)
+
+# --- Signal-Only Target ---
+rule signal:
+    input:
+        expand(f"{SIG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=SIG_SAMPLES),
+        expand(f"{{out_dir}}/merged_signal.root", out_dir=SIG_OUTPUT_DIR)
+
+# ==========================================
+# Processing Rules
+# ==========================================
+rule analyze_hyperons:
+    input:
+        root_file = get_input_filepath,
+        setup_script = "setup_env.sh",
+        fcl_file = f"{WORK_DIR}/run_analyze_hyperon_events.fcl"
+    output:
+        root_out = "{out_dir}/analyser_output_{sample}.root"
+    log:
+        app="{out_dir}/logs/analyze_{sample}.log"
+    resources:
+        mem_mb=10000,
+        time_min=720,
+        cpus=1
+    shadow: 
+        "minimal"
+    shell:
+        """
+        {APPTAINER_BIN} exec -B /cvmfs,/data,/home,/opt,/run/user,/etc/hostname,/etc/hosts,/etc/krb5.conf \
+        --ipc --pid "{CONTAINER}" /bin/bash -c " \
+            source {input.setup_script} && \
+            lar -c {input.fcl_file} -s {input.root_file} -T {output.root_out} \
+        " > {log.app} 2>&1
+        """
+
+# ==========================================
+# Generate the Text File List
+# ==========================================
+rule generate_hadd_list:
+    input:
+        root_files = get_hadd_inputs
+    output:
+        list_file = "{out_dir}/hadd_list_{dataset}.txt"
+    resources:
+        mem_mb=10000,
+        time_min=720,
+        cpus=1
+    run:
+        with open(output.list_file, "w") as f:
+            for root_file in input.root_files:
+                f.write(f"{root_file}\n")
+
+# ==========================================
+# Merging Rule 
+# ==========================================
+rule merge_trees:
+    input:
+        list_file = "{out_dir}/hadd_list_{dataset}.txt",
+        setup_script = "setup_env.sh"
+    output:
+        merged_out = "{out_dir}/merged_{dataset}.root"
+    log:
+        hadd_log = "{out_dir}/logs/hadd_{dataset}.log"
+    resources:
+        mem_mb=10000,
+        time_min=720,
+        cpus=1
+    shell:
+        """
+        {APPTAINER_BIN} exec -B /cvmfs,/data,/home,/opt,/run/user,/etc/hostname,/etc/hosts,/etc/krb5.conf \
+        --ipc --pid "{CONTAINER}" /bin/bash -c " \
+            source {input.setup_script} && \
+            hadd -f {output.merged_out} @{input.list_file} \
+        " > {log.hadd_log} 2>&1
+        """

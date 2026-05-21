@@ -328,14 +328,6 @@ namespace hyperon {
                 for (const art::Ptr<recob::PFParticle>& pfp : sliceParticles) {
                     
                     float crumbs_score = -999.0;
-                    if (fmCrumbs.isValid()){
-
-                        std::cout<<"CRUMBS Association is valid!!"<<std::endl;
-                    }
-                    if (fmCrumbs.at(i_slice).size() > 0){
-
-                        std::cout<<"There are crumbs scores for these slices!!!"<<std::endl;
-                    }
                     if (fmCrumbs.isValid() && fmCrumbs.at(i_slice).size() > 0) {
                         crumbs_score = fmCrumbs.at(i_slice).front()->score;
                     }
