@@ -21,7 +21,7 @@ $$\nu_{\mu} + N \rightarrow \mu^{-} + \Lambda^0 + K^{+} + N'$$
 The neutral $\Lambda^0$ travels a short distance before decaying via the weak interaction. We target the charged decay mode (Branching Ratio $\approx 63.9\%$):
 $$\Lambda^0 \rightarrow p + \pi^{-}$$
 
-*   **$p$ (Proton Track):** A highly ionizing track originating at a secondary vertex (V0), typically stopping in the active volume and exhibiting a distinct Bragg peak.
+*   **$p$ (Proton Track):** A highly ionising track originating at a secondary vertex (V0), typically stopping in the active volume and exhibiting a distinct Bragg peak.
 *   **$\pi^{-}$ (Pion Track):** A lower-ionizing, MIP-like track originating from the same secondary V0 vertex.
 
 ## 2. The Analyser Stage (`AnalyzeHyperon_module.cc`)
@@ -33,7 +33,9 @@ The core of the analysis is the `AnalyzeHyperon` LArSoft analyzer module.
 * **Tree Flattening:** Extracts event-level variables, track kinematics (start/end points, direction, momentum), and calorimetry metrics (dE/dx), and writes them into a flat `TTree` using the `TFileService`.
 
 ## 3. Event Selection Strategy
-The physics selection is designed to identify the classic detached "V0" topology characteristic of hyperon decays, specifically $\Lambda^0 \rightarrow p + \pi^-$. 
+The physics selection is designed to identify the classic detached "V0" topology characteristic of hyperon decays, specifically $\Lambda^0 \rightarrow p + \pi^-$.
+
+The event selection will handled mostly by python scripts in the `/scripts` directory. Running on outputs from the analyser stage. 
 
 The selection is applied through the following hierarchical cuts:
 
