@@ -79,3 +79,9 @@ snakemake --cores 1
 # I also like to use SLURM. Something like the following can be eaily used to run snakemake on slurm.
 snakemake --cluster "sbatch --time={resources.time_min} --mem={resources.mem_mb} --cpus-per-task={resources.cpus}" --jobs 1000 --latency-wait 60
 ```
+
+### Things to consider for future
+- What SBND production to use?
+- CORSIKA overlayed filtered hyperon sample
+- Is Genie the right generator? (FSI considerations...)
+- Why not use a BDT? 
