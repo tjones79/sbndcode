@@ -84,4 +84,6 @@ snakemake --cluster "sbatch --time={resources.time_min} --mem={resources.mem_mb}
 - What SBND production to use?
 - CORSIKA overlayed filtered hyperon sample
 - Is Genie the right generator? (FSI considerations...)
-- Why not use a BDT? 
+- Why not use a BDT?
+    - For full selection?
+    - Targeted selection with BDT (V0 topology? PID?)
