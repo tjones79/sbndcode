@@ -9,6 +9,7 @@ try:
     SIG_OUTPUT_DIR = os.environ["HYPERON_SIG_OUTPUT"]
     BG_OUTPUT_DIR = os.environ["HYPERON_BG_OUTPUT"]
     
+    LOCAL_PRODS = os.environ["LOCAL_PRODS"]
     WORK_DIR = os.environ["HYPERON_WORK_DIR"]
     CONTAINER = os.environ["CONTAINER_IMAGE"]
     APPTAINER_BIN = os.environ["APPTAINER_BIN"]
@@ -94,7 +95,8 @@ rule analyze_hyperons:
     input:
         root_file = get_input_filepath,
         setup_script = "setup_env.sh",
-        fcl_file = f"{WORK_DIR}/run_analyze_hyperon_events.fcl"
+        fcl_file = f"{WORK_DIR}/run_analyze_hyperon_events.fcl",
+        compiled_module = f"{LOCAL_PRODS}/sbndcode/v10_14_02_03/slf7.x86_64.e26.prof/lib/libsbndcode_Hyperons_AnalyzeHyperon_module.so"
     output:
         root_out = "{out_dir}/analyser_output_{sample}.root"
     log:

@@ -107,11 +107,16 @@ namespace hyperon {
 
         // Reco Tree Variables (Track Level - Inside Neutrino Slice)
         int fNTracks;
+        int fNShowers;
         std::vector<int>   fNuTrackID;
         std::vector<float> fNuTrackStartX;
         std::vector<float> fNuTrackStartY;
         std::vector<float> fNuTrackStartZ;
+        std::vector<float> fNuTrackEndX;
+        std::vector<float> fNuTrackEndY;
+        std::vector<float> fNuTrackEndZ;
         std::vector<float> fNuTrackLength;
+
 
         // True track stuff
         std::vector<int> fNuTrackTruePDG;
@@ -124,8 +129,23 @@ namespace hyperon {
 
         // Simple tag for true neutrino slice
         bool fHasTrueNuSlice;
-
         std::vector<int> fSliceIsTrueNeutrino;
+
+        // Truth definition at event level
+        bool fIsTrueSignal;
+        bool has_true_kaon;
+        bool has_true_lambda;
+        bool has_true_muon;
+
+        // V0 Candidate Variables
+        int fNV0s;
+        std::vector<float> fV0VertexX;
+        std::vector<float> fV0VertexY;
+        std::vector<float> fV0VertexZ;
+        std::vector<float> fV0DistToPV;
+        std::vector<float> fV0TrackDist;
+        std::vector<int>   fV0Track1ID;
+        std::vector<int>   fV0Track2ID;
 
 
         std::vector<float> SliceCRUMBSScore;
@@ -164,10 +184,15 @@ namespace hyperon {
 
         // Reco level track stuff (Neutrino children only)
         fTree->Branch("NTracks", &fNTracks, "NTracks/I");
+        fTree->Branch("NShowers", &fNShowers, "NShowers/I");
         fTree->Branch("NuTrackID", &fNuTrackID);
         fTree->Branch("NuTrackStartX", &fNuTrackStartX);
         fTree->Branch("NuTrackStartY", &fNuTrackStartY);
         fTree->Branch("NuTrackStartZ", &fNuTrackStartZ);
+        fTree->Branch("NuTrackStartX", &fNuTrackEndX);
+        fTree->Branch("NuTrackStartY", &fNuTrackEndY);
+        fTree->Branch("NuTrackStartZ", &fNuTrackEndZ);
+
         fTree->Branch("NuTrackLength", &fNuTrackLength);
 
         // True track stuff
@@ -184,6 +209,9 @@ namespace hyperon {
         fTree->Branch("HasTrueNuSlice", &fHasTrueNuSlice, "HasTrueNuSlice/O");
         fTree->Branch("SliceIsTrueNeutrino",&fSliceIsTrueNeutrino);
 
+        // Truth definition at event level
+        fTree->Branch("IsTrueSignal", &fIsTrueSignal, "IsTrueSignal/O");
+
         // CRUMBS
         fTree->Branch("SliceCRUMBSScore", &SliceCRUMBSScore);
 
@@ -193,6 +221,16 @@ namespace hyperon {
         fSubRunTree->Branch("run", &fRun_sr, "run/I");
         fSubRunTree->Branch("subRun", &fSubRun_sr, "subRun/I");
         fSubRunTree->Branch("pot", &fPOT, "pot/D");
+
+        // V0 Branches
+        fTree->Branch("NV0s", &fNV0s, "NV0s/I");
+        fTree->Branch("V0VertexX", &fV0VertexX);
+        fTree->Branch("V0VertexY", &fV0VertexY);
+        fTree->Branch("V0VertexZ", &fV0VertexZ);
+        fTree->Branch("V0DistToPV", &fV0DistToPV);
+        fTree->Branch("V0TrackDist", &fV0TrackDist);
+        fTree->Branch("V0Track1ID", &fV0Track1ID);
+        fTree->Branch("V0Track2ID", &fV0Track2ID);
         
     }
 
@@ -215,8 +253,12 @@ namespace hyperon {
         fNuTrackStartX.clear();
         fNuTrackStartY.clear();
         fNuTrackStartZ.clear();
+        fNuTrackEndX.clear();
+        fNuTrackEndY.clear();
+        fNuTrackEndZ.clear();
         fNuTrackLength.clear();
         fNTracks = 0;
+        fNShowers = 0;
 
         fNuTrackTruePDG.clear();
         fNuTrackTrueID.clear();
@@ -225,15 +267,32 @@ namespace hyperon {
         fHasTrueNuSlice = false;
         fSliceIsTrueNeutrino.clear();
 
+        fIsTrueSignal = false;
+        has_true_kaon = false;
+        has_true_lambda = false;
+        has_true_muon = false;
+
         fSliceVertexX.clear();
         fSliceVertexY.clear();
         fSliceVertexZ.clear();
 
         SliceCRUMBSScore.clear();
 
+        fNV0s = 0;
+        fV0VertexX.clear();
+        fV0VertexY.clear();
+        fV0VertexZ.clear();
+        fV0DistToPV.clear();
+        fV0TrackDist.clear();
+        fV0Track1ID.clear();
+        fV0Track2ID.clear();
+
         fRun = e.run();
         fEvent = e.event();
 
+
+        auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
+        art::ServiceHandle<cheat::ParticleInventoryService> pi_serv;
 
         /* 
         ********************************************************
@@ -278,6 +337,32 @@ namespace hyperon {
                 fTruePartStartX.push_back(particle.Vx());
                 fTruePartStartY.push_back(particle.Vy());
                 fTruePartStartZ.push_back(particle.Vz());
+
+                // Is this a primary particle?
+                if (particle.Mother() == 0 || particle.Process() == "primary") {
+                    
+                    // Trace back
+                    const art::Ptr<simb::MCTruth> truth = pi_serv->TrackIdToMCTruth_P(particle.TrackId());
+                    
+                    // Was this created by BNB?
+                    if (truth.isNonnull() && truth->Origin() == simb::kBeamNeutrino) {
+                        
+                        
+                        if (std::abs(particle.PdgCode()) == 13) {
+                            has_true_muon = true;
+                        } 
+                        else if (std::abs(particle.PdgCode()) == 321) {
+                            has_true_kaon = true;
+                        } 
+                        else if (std::abs(particle.PdgCode()) == 3122) {
+                            has_true_lambda = true;
+                        }
+                    }
+                }
+            }
+            
+            if (has_true_muon && has_true_kaon && has_true_lambda) {
+                fIsTrueSignal = true;
             }
         }
 
@@ -293,9 +378,6 @@ namespace hyperon {
         art::Handle<std::vector<recob::PFParticle>> pfpHandle;
         art::Handle<std::vector<recob::Track>> trackHandle;
 
-        auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
-        art::ServiceHandle<cheat::ParticleInventoryService> pi_serv;
-
         if (e.getByLabel(fSliceLabel, sliceHandle) && e.getByLabel(fPFParticleLabel, pfpHandle) && e.getByLabel(fTrackLabel, trackHandle)) {
         
             fNSlices = sliceHandle->size();
@@ -307,6 +389,7 @@ namespace hyperon {
             art::FindManyP<larpandoraobj::PFParticleMetadata> pfpToMetadata(pfpHandle, e, fPFParticleLabel);
             // "Give me the Track associated with this PFParticle"
             art::FindManyP<recob::Track> pfpToTrack(pfpHandle, e, fTrackLabel);
+            art::FindManyP<recob::Shower> pfpToShower(pfpHandle, e, fPFParticleLabel);
             // "Give me all the Hits that make up this Track"
             art::FindManyP<recob::Hit> trackToHit(trackHandle, e, fTrackLabel);
             // Give me all the vertices associated with this pfp
@@ -418,6 +501,12 @@ namespace hyperon {
                             fNuTrackStartX.push_back(track->Vertex().X());
                             fNuTrackStartY.push_back(track->Vertex().Y());
                             fNuTrackStartZ.push_back(track->Vertex().Z());
+
+                            // Find end of the nu slice tracks
+                            fNuTrackEndX.push_back(track->End().X());
+                            fNuTrackEndY.push_back(track->End().Y());
+                            fNuTrackEndZ.push_back(track->End().Z());
+
                             fNuTrackLength.push_back(track->Length());
                             // Only fill NTracks when slice is neutrino
                             fNTracks++;
@@ -449,7 +538,47 @@ namespace hyperon {
                             fNuTrackTrueID.push_back(trueTrackID);
 
                         }
+                        std::vector<art::Ptr<recob::Shower>> showers = pfpToShower.at(pfp.key());
+                        if(!showers.empty()){
+                            fNShowers++;
+                        }
 
+                    }
+                    if (fNTracks >= 2) {
+                        float pvX = fSliceVertexX.back();
+                        float pvY = fSliceVertexY.back();
+                        float pvZ = fSliceVertexZ.back();
+
+                        for (int i = 0; i < fNTracks; i++) {
+                            for (int j = i + 1; j < fNTracks; j++) {
+                                
+                                // Calculate how close their start points are
+                                float dx = fNuTrackStartX[i] - fNuTrackStartX[j];
+                                float dy = fNuTrackStartY[i] - fNuTrackStartY[j];
+                                float dz = fNuTrackStartZ[i] - fNuTrackStartZ[j];
+                                float trk_dist = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+                                // Calculate the synthetic V0 vertex (midpoint)
+                                float v0_x = (fNuTrackStartX[i] + fNuTrackStartX[j]) / 2.0;
+                                float v0_y = (fNuTrackStartY[i] + fNuTrackStartY[j]) / 2.0;
+                                float v0_z = (fNuTrackStartZ[i] + fNuTrackStartZ[j]) / 2.0;
+
+                                // Calculate detachment from PV
+                                float dist_to_pv = std::sqrt(std::pow(v0_x - pvX, 2) +
+                                                             std::pow(v0_y - pvY, 2) +
+                                                             std::pow(v0_z - pvZ, 2));
+
+                                // SAVE EVERYTHING - :O
+                                fV0VertexX.push_back(v0_x);
+                                fV0VertexY.push_back(v0_y);
+                                fV0VertexZ.push_back(v0_z);
+                                fV0DistToPV.push_back(dist_to_pv);
+                                fV0TrackDist.push_back(trk_dist); 
+                                fV0Track1ID.push_back(fNuTrackID[i]);
+                                fV0Track2ID.push_back(fNuTrackID[j]);
+                                fNV0s++;
+                            }
+                        }
                     }
                     // Found neutrino slice
                     break;

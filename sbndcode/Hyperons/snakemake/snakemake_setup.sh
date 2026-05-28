@@ -18,6 +18,7 @@ export HYPERON_SIG_OUTPUT="/data/tjones9/sbnd/hyperons/hyperon_analyser_output/f
 # ==========================================
 export HYPERON_WORK_DIR="$HOME/SBND/larsoft_v10_14_02_03/srcs/sbndcode/sbndcode/Hyperons"
 export SETUP_LOCAL=${1:-"$HOME/SBND/larsoft_v10_14_02_03/localProducts_larsoft_v10_14_02_03_prof_e26/setup"}
+export LOCAL_PRODS="$HOME/SBND/larsoft_v10_14_02_03/localProducts_larsoft_v10_14_02_03_prof_e26"
 
 export CONTAINER_IMAGE="/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-dev-sl7:latest"
 export APPTAINER_BIN="/cvmfs/oasis.opensciencegrid.org/mis/apptainer/current/bin/apptainer"

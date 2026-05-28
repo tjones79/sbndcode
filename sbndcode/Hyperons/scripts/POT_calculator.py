@@ -14,12 +14,44 @@ def main(file_glob):
     chain_subruns = ROOT.TChain("SubRuns")
     chain_events = ROOT.TChain("Events")
 
+    valid_files_count = 0
+    excluded_files = []
+
     for f in files:
+        
+        # Try to open the file in read-only batch mode
+        try:
+            tf = ROOT.TFile.Open(f, "READ")
+        except OSError as e:
+            # Catches the truncation crash if the file is still copying
+            excluded_files.append(f"{f} (Currently Copying / Truncated)")
+            continue
+
+        # Catches files that finished copying but are genuinely corrupted
+        if not tf or tf.IsZombie():
+            excluded_files.append(f"{f} (Zombie / Corrupted)")
+            if tf: 
+                tf.Close()
+            continue
+        
+        if not tf.GetListOfKeys().Contains("SubRuns") or not tf.GetListOfKeys().Contains("Events"):
+            excluded_files.append(f"{f} (Missing 'SubRuns' or 'Events' tree)")
+            tf.Close()
+            continue
+
+        tf.Close()
         chain_subruns.Add(f)
         chain_events.Add(f)
+        valid_files_count += 1
 
-    if chain_subruns.GetNtrees() == 0:
-        raise RuntimeError("TChain could not open the 'SubRuns' tree in the provided files.")
+    if valid_files_count == 0:
+        print("\n--- ERROR ---")
+        print("No valid files could be opened.")
+        if excluded_files:
+            print("Excluded files:")
+            for ef in excluded_files:
+                print(f"  - {ef}")
+        raise RuntimeError("Zero valid files to process.")
 
     df_subruns = ROOT.RDataFrame(chain_subruns)
     df_events = ROOT.RDataFrame(chain_events)
@@ -30,15 +62,23 @@ def main(file_glob):
     df_subruns = df_subruns.Define("POTValue", "POTObj.totpot")
     totalPOT_ptr = df_subruns.Sum("POTValue")
 
-
     num_events = num_events_ptr.GetValue()
     totalPOT = totalPOT_ptr.GetValue()
 
-    print("Finished getting values")
-
-    print(f"For files in {file_glob}")
+    print("\nFinished getting values")
+    print("========================")
+    print(f"For files in: {file_glob}")
+    print(f"Processed files: {valid_files_count}/{len(files)}")
     print(f"POT: {totalPOT}")
     print(f"Number of events is: {num_events}")
+    print("========================")
+
+    if excluded_files:
+        print(f"\n[WARNING] Excluded {len(excluded_files)} file(s) because they could not be opened:")
+        for ef in excluded_files:
+            print(f"  - {ef}")
+    else:
+        print("\nAll matched files were processed successfully!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
