@@ -73,20 +73,24 @@ rule all:
         expand(f"{{out_dir}}/analyser_output_{{sample}}.root", sample=SIG_SAMPLES, out_dir=SIG_OUTPUT_DIR),
         # Merging
         f"{BG_OUTPUT_DIR}/merged_background.root",
-        f"{SIG_OUTPUT_DIR}/merged_signal.root"
+        f"{SIG_OUTPUT_DIR}/merged_signal.root",
+        f"{BG_OUTPUT_DIR}/merged_background_filtered.root",
+        f"{SIG_OUTPUT_DIR}/merged_signal_filtered.root"
         
 
 # --- Background-Only Target ---
 rule background:
     input:
         expand(f"{BG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=BG_SAMPLES),
-        expand(f"{{out_dir}}/merged_background.root", out_dir=BG_OUTPUT_DIR)
+        expand(f"{{out_dir}}/merged_background.root", out_dir=BG_OUTPUT_DIR),
+        f"{BG_OUTPUT_DIR}/merged_background_filtered.root"
 
 # --- Signal-Only Target ---
 rule signal:
     input:
         expand(f"{SIG_OUTPUT_DIR}/analyser_output_{{sample}}.root", sample=SIG_SAMPLES),
-        expand(f"{{out_dir}}/merged_signal.root", out_dir=SIG_OUTPUT_DIR)
+        expand(f"{{out_dir}}/merged_signal.root", out_dir=SIG_OUTPUT_DIR),
+        f"{SIG_OUTPUT_DIR}/merged_signal_filtered.root"
 
 # ==========================================
 # Processing Rules
@@ -155,4 +159,20 @@ rule merge_trees:
             source {input.setup_script} && \
             hadd -f {output.merged_out} @{input.list_file} \
         " > {log.hadd_log} 2>&1
+        """
+# Run truth filtering python script on the merged files
+rule run_truth_filter:
+    input:
+        merged_file = "{out_dir}/merged_{dataset}.root",
+    output:
+        filtered_file = "{out_dir}/merged_{dataset}_filtered.root"
+    log:
+        filter_log = "{out_dir}/logs/truth_filter_{dataset}.log"
+    resources:
+        mem_mb=10000,
+        time_min=720,
+        cpus=1
+    shell:
+        """
+        python3 {WORK_DIR}/scripts/truth_filter.py -i {input.merged_file} -o {output.filtered_file} > {log.filter_log} 2>&1
         """

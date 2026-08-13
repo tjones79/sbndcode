@@ -18,16 +18,14 @@ def main(file_glob):
     excluded_files = []
 
     for f in files:
-        
-        # Try to open the file in read-only batch mode
         try:
             tf = ROOT.TFile.Open(f, "READ")
         except OSError as e:
-            # Catches the truncation crash if the file is still copying
+            # Incase file is truncated/not finished copying
             excluded_files.append(f"{f} (Currently Copying / Truncated)")
             continue
 
-        # Catches files that finished copying but are genuinely corrupted
+        # Don't count genuinely corrupted files
         if not tf or tf.IsZombie():
             excluded_files.append(f"{f} (Zombie / Corrupted)")
             if tf: 

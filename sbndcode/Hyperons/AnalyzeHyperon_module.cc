@@ -14,8 +14,6 @@
 #include "messagefacility/MessageLogger/MessageLogger.h"
 #include "art/Framework/Services/Registry/ServiceHandle.h"
 
-
-#include "art_root_io/TFileService.h"
 // LArSoft Includes
 #include "lardata/DetectorInfoServices/DetectorClocksService.h"
 #include "lardataobj/RecoBase/Cluster.h"
@@ -31,7 +29,6 @@
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/AnalysisBase/Calorimetry.h"
 #include "lardataobj/RecoBase/Shower.h"
-#include "lardataobj/RecoBase/Vertex.h"
 #include "lardata/Utilities/AssociationUtil.h"
 #include "sbnobj/Common/Reco/OpT0FinderResult.h"
 #include "sbnobj/Common/Reco/CRUMBSResult.h"
@@ -39,20 +36,22 @@
 #include "lardataobj/AnalysisBase/T0.h"
 #include "sbnobj/Common/Reco/SimpleFlashMatchVars.h"
 #include "sbndcode/CosmicId/Algs/PandoraNuScoreCosmicIdAlg.h"
-#include "lardata/DetectorInfoServices/DetectorClocksService.h"
-#include "larsim/MCCheater/ParticleInventoryService.h"
 #include "larsim/Utils/TruthMatchUtils.h"
 #include "larcoreobj/SummaryData/POTSummary.h"
+#include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
 
-// // Root Includes
+// Root Includes
 #include "TLorentzVector.h"
 #include <iostream>
 #include <vector>
+#include <set>
+#include <map>
 #include <TTree.h>
 #include <TH1.h>
 #include <fstream>
 #include <string>
 #include <exception>
+#include <limits> 
 
 namespace hyperon {
 
@@ -81,530 +80,757 @@ namespace hyperon {
         int fRun;
         int fEvent;
 
-        // Primary interaction vertex
-        float fNuVertexX;
-        float fNuVertexY;
-        float fNuVertexZ;
-
-        // All particle vertices
-        std::vector<int>   fTruePartPDG;
-        std::vector<int>   fTruePartMother;
-        std::vector<int>   fTruePartTrackID;
-        std::vector<float> fTruePartStartX;
-        std::vector<float> fTruePartStartY;
-        std::vector<float> fTruePartStartZ;
-
         // Labels
         std::string fSliceLabel = "pandora";
         std::string fPFParticleLabel = "pandora";
         std::string fTrackLabel = "pandoraTrack";
+        std::string fShowerLabel = "pandoraShower";
         std::string fCrumbsLabel = "crumbs";
+        std::string fHitLabel = "gaushit";
+        std::string fPIDLabel = "pandoraPid";
+        std::string fOpT0Label = "opt0finder";
 
-        // Reco Tree Variables
-        int fNSlices;
-        std::vector<int> fSliceParentPDG; // What is pandora's PDG guess?
-        std::vector<float> fSliceNuScore; // The BDT score (0.0 -> 1.0)
+        std::vector<int> fNu_PDG;
+        std::vector<int> fNu_Mode;
+        std::vector<int> fNu_NuMode;
+        std::vector<double> fNu_E;
+        std::vector<int> fNu_TrackID;
 
-        // Reco Tree Variables (Track Level - Inside Neutrino Slice)
-        int fNTracks;
-        int fNShowers;
-        std::vector<int>   fNuTrackID;
-        std::vector<float> fNuTrackStartX;
-        std::vector<float> fNuTrackStartY;
-        std::vector<float> fNuTrackStartZ;
-        std::vector<float> fNuTrackEndX;
-        std::vector<float> fNuTrackEndY;
-        std::vector<float> fNuTrackEndZ;
-        std::vector<float> fNuTrackLength;
+        std::vector<int> particle_interaction_index;
 
+        std::vector<int> neutrino_daughters;
+        std::vector<int> particlePDG;
+        std::vector<int> status_code;
+        std::vector<int> particleMotherID;
+        std::vector<int> particleTrackID;
+        std::vector<int> particleMotherPDG;
+        std::vector<double> particleKE;
+        std::vector<double> particleP;
+        std::vector<double> particleE;
+        std::vector<double> particlePx;
+        std::vector<double> particlePy;
+        std::vector<double> particlePz;
 
-        // True track stuff
-        std::vector<int> fNuTrackTruePDG;
-        std::vector<int> fNuTrackTrueMotherTrackID;
-        std::vector<int> fNuTrackTrueID;
+        // True Geant4 Particle Blocks
+        std::vector<int> geant_PDG;
+        std::vector<int> geant_TrackID;
+        std::vector<int> geant_MotherID;
+        std::vector<double> geant_startX;
+        std::vector<double> geant_startY;
+        std::vector<double> geant_startZ;
+        std::vector<double> geant_endX;
+        std::vector<double> geant_endY;
+        std::vector<double> geant_endZ;
+        std::vector<double> geant_P;
+        std::vector<double> geant_Px;
+        std::vector<double> geant_Py;
+        std::vector<double> geant_Pz;
+        std::vector<int> geant_TrueHitCount;
+        std::vector<int> geant_HitsU;
+        std::vector<int> geant_HitsV;
+        std::vector<int> geant_HitsW;
 
-        std::vector<float> fSliceVertexX;
-        std::vector<float> fSliceVertexY;
-        std::vector<float> fSliceVertexZ;
-
-        // Simple tag for true neutrino slice
-        bool fHasTrueNuSlice;
-        std::vector<int> fSliceIsTrueNeutrino;
-
-        // Truth definition at event level
-        bool fIsTrueSignal;
-        bool has_true_kaon;
-        bool has_true_lambda;
-        bool has_true_muon;
-
-        // V0 Candidate Variables
-        int fNV0s;
-        std::vector<float> fV0VertexX;
-        std::vector<float> fV0VertexY;
-        std::vector<float> fV0VertexZ;
-        std::vector<float> fV0DistToPV;
-        std::vector<float> fV0TrackDist;
-        std::vector<int>   fV0Track1ID;
-        std::vector<int>   fV0Track2ID;
-
-
-        std::vector<float> SliceCRUMBSScore;
-
+        // True Interaction Vertex
+        std::vector<double> fTrueVtxX;
+        std::vector<double> fTrueVtxY;
+        std::vector<double> fTrueVtxZ;
+        std::vector<double> fTrueVtxT;
         
+
+        // Reconstructed Slices
+        std::vector<int> fSlice_ID;
+        std::vector<float> fSlice_NuScore;
+        std::vector<int>   fSlice_TotalHits;
+        std::vector<int>   fSlice_TrueNuHits;
+        int                fEvent_TotalTrueNuHits; 
+
+
+        std::vector<float> fSlice_VtxX;
+        std::vector<float> fSlice_VtxY;
+        std::vector<float> fSlice_VtxZ;
+
+        std::vector<float> fSlice_Opt0Score;
+
+        // Reconstructed Tracks
+        std::vector<int> fTrack_ID;
+        std::vector<int> fTrack_SliceID;
+        std::vector<int> fTrack_TrueGeantID;
+        std::vector<int> fTrack_IsPrimary;
+
+        // Reconstructed Track Geometry s
+        std::vector<float> fTrack_Length;
+        std::vector<float> fTrack_StartX;
+        std::vector<float> fTrack_StartY;
+        std::vector<float> fTrack_StartZ;
+        std::vector<float> fTrack_EndX;
+        std::vector<float> fTrack_EndY;
+        std::vector<float> fTrack_EndZ;
+
+        // Reconstructed Showers
+        std::vector<int> fShower_ID;
+        std::vector<int> fShower_SliceID;
+        std::vector<int> fShower_TrueGeantID;
+
+        std::vector<float> fTrack_TrackScore;
+        std::vector<float> fShower_TrackScore;
+        std::vector<int> fShower_IsPrimary;
+        std::vector<float> fTrack_Chi2Proton;
+        std::vector<float> fTrack_Chi2Muon;
+
+
+
     };
 
     AnalyzeHyperon::AnalyzeHyperon(fhicl::ParameterSet const& p)
         : EDAnalyzer(p) {}
 
-    
     void AnalyzeHyperon::beginJob() {
         art::ServiceHandle<art::TFileService> tfs;
-        fTree = tfs->make<TTree>("tree", "Minimal Hyperon Truth Tree");
+        fTree = tfs->make<TTree>("tree", "Hyperon Slicing Performance Tree");
 
         fTree->Branch("run", &fRun, "run/I");
         fTree->Branch("event", &fEvent, "event/I");
 
-        // Primary Vertex Branches - we need these
-        fTree->Branch("nuVertexX", &fNuVertexX, "nuVertexX/F");
-        fTree->Branch("nuVertexY", &fNuVertexY, "nuVertexY/F");
-        fTree->Branch("nuVertexZ", &fNuVertexZ, "nuVertexZ/F");
+        fTree->Branch("nu_pdg", &fNu_PDG);
+        fTree->Branch("nu_mode", &fNu_Mode);
+        fTree->Branch("nu_numode", &fNu_NuMode);
+        fTree->Branch("nu_energy", &fNu_E);
+        fTree->Branch("nu_track_id", &fNu_TrackID);
+        fTree->Branch("NeutrinoDaughters", &neutrino_daughters);
 
-        // All particle
-        fTree->Branch("TruePartPDG", &fTruePartPDG);
-        fTree->Branch("TruePartMother", &fTruePartMother);
-        fTree->Branch("TruePartTrackID", &fTruePartTrackID);
-        fTree->Branch("TruePartStartX", &fTruePartStartX);
-        fTree->Branch("TruePartStartY", &fTruePartStartY);
-        fTree->Branch("TruePartStartZ", &fTruePartStartZ);
+        fTree->Branch("particle_interaction_index", &particle_interaction_index);
 
-        // Reco level slice stuff
-        fTree->Branch("NSlices", &fNSlices, "NSlices/I");
-        fTree->Branch("SliceParentPDG", &fSliceParentPDG);
-        fTree->Branch("SliceNuScore", &fSliceNuScore);
+        fTree->Branch("TrueVtxX", &fTrueVtxX);
+        fTree->Branch("TrueVtxY", &fTrueVtxY);
+        fTree->Branch("TrueVtxZ", &fTrueVtxZ);
+        fTree->Branch("TrueVtxT", &fTrueVtxT);
 
-        // Reco level track stuff (Neutrino children only)
-        fTree->Branch("NTracks", &fNTracks, "NTracks/I");
-        fTree->Branch("NShowers", &fNShowers, "NShowers/I");
-        fTree->Branch("NuTrackID", &fNuTrackID);
-        fTree->Branch("NuTrackStartX", &fNuTrackStartX);
-        fTree->Branch("NuTrackStartY", &fNuTrackStartY);
-        fTree->Branch("NuTrackStartZ", &fNuTrackStartZ);
-        fTree->Branch("NuTrackStartX", &fNuTrackEndX);
-        fTree->Branch("NuTrackStartY", &fNuTrackEndY);
-        fTree->Branch("NuTrackStartZ", &fNuTrackEndZ);
+        fTree->Branch("particlePDG", &particlePDG);
+        fTree->Branch("status_code", &status_code);
+        fTree->Branch("particleMotherID", &particleMotherID);
+        fTree->Branch("particleTrackID", &particleTrackID);
+        fTree->Branch("particleMotherPDG", &particleMotherPDG);
+        fTree->Branch("particleKE", &particleKE);
+        fTree->Branch("particleP", &particleP);
+        fTree->Branch("particleE", &particleE);
+        fTree->Branch("particlePx", &particlePx);
+        fTree->Branch("particlePy", &particlePy);
+        fTree->Branch("particlePz", &particlePz);
 
-        fTree->Branch("NuTrackLength", &fNuTrackLength);
+        // Geant4 Identity & Coordinates
+        fTree->Branch("geant_PDG", &geant_PDG);
+        fTree->Branch("geant_TrackID", &geant_TrackID);
+        fTree->Branch("geant_MotherID", &geant_MotherID);
+        fTree->Branch("geant_startX", &geant_startX);
+        fTree->Branch("geant_startY", &geant_startY);
+        fTree->Branch("geant_startZ", &geant_startZ);
+        fTree->Branch("geant_endX", &geant_endX);
+        fTree->Branch("geant_endY", &geant_endY);
+        fTree->Branch("geant_endZ", &geant_endZ);
+        fTree->Branch("geant_P", &geant_P);
+        fTree->Branch("geant_Px", &geant_Px);
+        fTree->Branch("geant_Py", &geant_Py);
+        fTree->Branch("geant_Pz", &geant_Pz);
+        fTree->Branch("geant_TrueHitCount", &geant_TrueHitCount);
+        fTree->Branch("geant_HitsU", &geant_HitsU);
+        fTree->Branch("geant_HitsV", &geant_HitsV);
+        fTree->Branch("geant_HitsW", &geant_HitsW);
 
-        // True track stuff
-        fTree->Branch("NuTrackTruePDG", &fNuTrackTruePDG);
-        fTree->Branch("NuTrackTrueMotherTrackID", &fNuTrackTrueMotherTrackID);
-        fTree->Branch("NuTrackTrueID", &fNuTrackTrueID);
+        // Flat Slices
+        fTree->Branch("slice_ID", &fSlice_ID);
+        fTree->Branch("slice_NuScore", &fSlice_NuScore);
+        fTree->Branch("slice_TotalHits", &fSlice_TotalHits);
+        fTree->Branch("slice_TrueNuHits", &fSlice_TrueNuHits);
+        fTree->Branch("event_TotalTrueNuHits", &fEvent_TotalTrueNuHits, "event_TotalTrueNuHits/I");
 
-        fTree->Branch("SliceVertexX", &fSliceVertexX);
-        fTree->Branch("SliceVertexY", &fSliceVertexY);
-        fTree->Branch("SliceVertexZ", &fSliceVertexZ);
+        fTree->Branch("slice_VtxX", &fSlice_VtxX);
+        fTree->Branch("slice_VtxY", &fSlice_VtxY);
+        fTree->Branch("slice_VtxZ", &fSlice_VtxZ);
 
+        fTree->Branch("slice_Opt0Score", &fSlice_Opt0Score);
 
-        // Simple truth tag for slice
-        fTree->Branch("HasTrueNuSlice", &fHasTrueNuSlice, "HasTrueNuSlice/O");
-        fTree->Branch("SliceIsTrueNeutrino",&fSliceIsTrueNeutrino);
+        // Flat Tracks
+        fTree->Branch("track_ID", &fTrack_ID);
+        fTree->Branch("track_SliceID", &fTrack_SliceID);
+        fTree->Branch("track_TrueGeantID", &fTrack_TrueGeantID);
+        fTree->Branch("track_IsPrimary", &fTrack_IsPrimary);
 
-        // Truth definition at event level
-        fTree->Branch("IsTrueSignal", &fIsTrueSignal, "IsTrueSignal/O");
+        fTree->Branch("track_Length", &fTrack_Length);
+        fTree->Branch("track_StartX", &fTrack_StartX);
+        fTree->Branch("track_StartY", &fTrack_StartY);
+        fTree->Branch("track_StartZ", &fTrack_StartZ);
+        fTree->Branch("track_EndX", &fTrack_EndX);
+        fTree->Branch("track_EndY", &fTrack_EndY);
+        fTree->Branch("track_EndZ", &fTrack_EndZ);
 
-        // CRUMBS
-        fTree->Branch("SliceCRUMBSScore", &SliceCRUMBSScore);
+        // Flat Showers
+        fTree->Branch("shower_ID", &fShower_ID);
+        fTree->Branch("shower_SliceID", &fShower_SliceID);
+        fTree->Branch("shower_TrueGeantID", &fShower_TrueGeantID);
+        fTree->Branch("shower_IsPrimary", &fShower_IsPrimary);
 
+        fTree->Branch("track_TrackScore", &fTrack_TrackScore);
+        fTree->Branch("shower_TrackScore", &fShower_TrackScore);
 
-        // Subrun tree to get some info
+        fTree->Branch("track_Chi2Proton", &fTrack_Chi2Proton);
+        fTree->Branch("track_Chi2Muon", &fTrack_Chi2Muon);
+
+        // Subrun Metadata Tree
         fSubRunTree = tfs->make<TTree>("subrunTree", "SubRun Level Info");
         fSubRunTree->Branch("run", &fRun_sr, "run/I");
         fSubRunTree->Branch("subRun", &fSubRun_sr, "subRun/I");
         fSubRunTree->Branch("pot", &fPOT, "pot/D");
-
-        // V0 Branches
-        fTree->Branch("NV0s", &fNV0s, "NV0s/I");
-        fTree->Branch("V0VertexX", &fV0VertexX);
-        fTree->Branch("V0VertexY", &fV0VertexY);
-        fTree->Branch("V0VertexZ", &fV0VertexZ);
-        fTree->Branch("V0DistToPV", &fV0DistToPV);
-        fTree->Branch("V0TrackDist", &fV0TrackDist);
-        fTree->Branch("V0Track1ID", &fV0Track1ID);
-        fTree->Branch("V0Track2ID", &fV0Track2ID);
-        
     }
 
-    // Analyze, this runs on every event
     void AnalyzeHyperon::analyze(art::Event const& e) {
 
-        // Cleanup
-        fTruePartPDG.clear();
-        fTruePartMother.clear();
-        fTruePartTrackID.clear();
-        fTruePartStartX.clear();
-        fTruePartStartY.clear();
-        fTruePartStartZ.clear();
+        art::ServiceHandle<cheat::ParticleInventoryService> pi_serv;
+        art::ServiceHandle<cheat::BackTrackerService> bt_serv;
 
-        fSliceParentPDG.clear();
-        fSliceNuScore.clear();
-        fNSlices = 0;
+        // Reset Generator & Event Info
+        fNu_PDG.clear();
+        fNu_TrackID.clear();
+        fNu_Mode.clear();
+        fNu_NuMode.clear();
+        fNu_E.clear();
+        fTrueVtxX.clear();
+        fTrueVtxY.clear();
+        fTrueVtxZ.clear();
+        fTrueVtxT.clear();
 
-        fNuTrackID.clear();
-        fNuTrackStartX.clear();
-        fNuTrackStartY.clear();
-        fNuTrackStartZ.clear();
-        fNuTrackEndX.clear();
-        fNuTrackEndY.clear();
-        fNuTrackEndZ.clear();
-        fNuTrackLength.clear();
-        fNTracks = 0;
-        fNShowers = 0;
+        particle_interaction_index.clear();
 
-        fNuTrackTruePDG.clear();
-        fNuTrackTrueID.clear();
-        fNuTrackTrueMotherTrackID.clear();
+        neutrino_daughters.clear();
+        particlePDG.clear();
+        status_code.clear();
+        particleMotherID.clear();
+        particleTrackID.clear();
+        particleMotherPDG.clear();
+        particleKE.clear();
+        particleP.clear();
+        particleE.clear();
+        particlePx.clear();
+        particlePy.clear();
+        particlePz.clear();
 
-        fHasTrueNuSlice = false;
-        fSliceIsTrueNeutrino.clear();
+        // Reset Geant4 Data
+        geant_PDG.clear();
+        geant_TrackID.clear();
+        geant_MotherID.clear();
+        geant_startX.clear();
+        geant_startY.clear();
+        geant_startZ.clear();
+        geant_endX.clear();
+        geant_endY.clear();
+        geant_endZ.clear();
+        geant_P.clear();
+        geant_Px.clear();
+        geant_Py.clear();
+        geant_Pz.clear();
+        geant_TrueHitCount.clear();
+        geant_HitsU.clear();
+        geant_HitsV.clear();
+        geant_HitsW.clear();
 
-        fIsTrueSignal = false;
-        has_true_kaon = false;
-        has_true_lambda = false;
-        has_true_muon = false;
+        // Reset Slices & Tracks & Showers
+        fSlice_ID.clear();
+        fSlice_NuScore.clear();
+        fSlice_TotalHits.clear();
+        fSlice_TrueNuHits.clear();
+        fEvent_TotalTrueNuHits = 0;
 
-        fSliceVertexX.clear();
-        fSliceVertexY.clear();
-        fSliceVertexZ.clear();
+        fTrack_ID.clear();
+        fTrack_SliceID.clear();
+        fTrack_TrueGeantID.clear();
+        fTrack_IsPrimary.clear();
 
-        SliceCRUMBSScore.clear();
+        fShower_ID.clear();
+        fShower_SliceID.clear();
+        fShower_TrueGeantID.clear();
+        fShower_IsPrimary.clear();
 
-        fNV0s = 0;
-        fV0VertexX.clear();
-        fV0VertexY.clear();
-        fV0VertexZ.clear();
-        fV0DistToPV.clear();
-        fV0TrackDist.clear();
-        fV0Track1ID.clear();
-        fV0Track2ID.clear();
+        fTrack_TrackScore.clear();
+        fShower_TrackScore.clear();
+
+        fSlice_Opt0Score.clear();
+
+        fTrack_Chi2Proton.clear();
+        fTrack_Chi2Muon.clear();
 
         fRun = e.run();
         fEvent = e.event();
 
 
-        auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
-        art::ServiceHandle<cheat::ParticleInventoryService> pi_serv;
 
-        /* 
-        ********************************************************
-        1. Get the Primary Neutrino Vertex (Truth stuff)
-        ********************************************************
-        */ 
+        // Set to keep track of Geant4 particles originating from our neutrino
+        std::set<int> nu_g4_track_ids;
+        // target beam neutrino interaction.
+        art::Ptr<simb::MCTruth> beamMCTruth;
+
+        /* ********************************************************
+        Truth Block
+        ******************************************************** */ 
         art::Handle<std::vector<simb::MCTruth>> mctruthListHandle;
         if (e.getByLabel("generator", mctruthListHandle) && !mctruthListHandle->empty()) {
-            
-            // Grab the first neutrino interaction in the event
-            const simb::MCTruth& truth = mctruthListHandle->at(0);
-            
-            
+            art::FindManyP<simb::MCParticle, sim::GeneratedParticleInfo> geantAssns(
+                mctruthListHandle, e, "largeant"
+            );
+            int truth_iter = 0;
+            int interaction_idx = 0;
+            for(size_t i = 0; i < mctruthListHandle->size(); ++i){
 
-            const simb::MCNeutrino& nu = truth.GetNeutrino();
+                art::Ptr<simb::MCTruth> truth(mctruthListHandle, i);
+                if (truth->Origin() != simb::kBeamNeutrino) continue;
 
+                beamMCTruth = truth;
 
+                auto const& neutrino = truth->GetNeutrino();
+                fNu_TrackID.push_back(neutrino.Nu().TrackId());
+                fNu_PDG.push_back(neutrino.Nu().PdgCode());
+                fNu_E.push_back(neutrino.Nu().E()); 
 
-            
-            // Save the exact coordinate the neutrino interacted
-            fNuVertexX = nu.Nu().Vx();
-            fNuVertexY = nu.Nu().Vy();
-            fNuVertexZ = nu.Nu().Vz();
-        }
+                auto const& nu_pos = neutrino.Nu().Position();
+                fTrueVtxX.push_back(nu_pos.X());
+                fTrueVtxY.push_back(nu_pos.Y());
+                fTrueVtxZ.push_back(nu_pos.Z());
+                fTrueVtxT.push_back(nu_pos.T());
 
-        /*
-        ********************************************************
-        2. Get All Particle Vertices (MCParticle stuff)
-        ********************************************************
-        */
-        art::Handle<std::vector<simb::MCParticle>> mcpartListHandle;
-        if (e.getByLabel("largeant", mcpartListHandle)) {
-            
-            // Loop over every single particle simulated by Geant4
-            for (auto const& particle : *mcpartListHandle) {
-                
-                fTruePartPDG.push_back(particle.PdgCode());
-                fTruePartMother.push_back(particle.Mother());
-                fTruePartTrackID.push_back(particle.TrackId());
-                
-                // particle.Vx() gives the starting position of this specific track
-                fTruePartStartX.push_back(particle.Vx());
-                fTruePartStartY.push_back(particle.Vy());
-                fTruePartStartZ.push_back(particle.Vz());
-
-                // Is this a primary particle?
-                if (particle.Mother() == 0 || particle.Process() == "primary") {
-                    
-                    // Trace back
-                    const art::Ptr<simb::MCTruth> truth = pi_serv->TrackIdToMCTruth_P(particle.TrackId());
-                    
-                    // Was this created by BNB?
-                    if (truth.isNonnull() && truth->Origin() == simb::kBeamNeutrino) {
-                        
-                        
-                        if (std::abs(particle.PdgCode()) == 13) {
-                            has_true_muon = true;
-                        } 
-                        else if (std::abs(particle.PdgCode()) == 321) {
-                            has_true_kaon = true;
-                        } 
-                        else if (std::abs(particle.PdgCode()) == 3122) {
-                            has_true_lambda = true;
-                        }
-                    }
+                int num_neutrino_daughters = neutrino.Nu().NumberDaughters();
+                for (int j = 0; j < num_neutrino_daughters; j++) {
+                    neutrino_daughters.push_back(neutrino.Nu().Daughter(j));
                 }
-            }
-            
-            if (has_true_muon && has_true_kaon && has_true_lambda) {
-                fIsTrueSignal = true;
+
+                fNu_Mode.push_back(neutrino.InteractionType());
+                fNu_NuMode.push_back(neutrino.Mode());
+
+                // Generator particles
+                std::map<int, int> gen_track_to_pdg;
+                for(int k = 0; k < truth->NParticles(); k++){
+                    gen_track_to_pdg[truth->GetParticle(i).TrackId()] = truth->GetParticle(k).PdgCode();
+                }
+                for(int ip = 0; ip < truth->NParticles(); ip++){
+                    simb::MCParticle particle = truth->GetParticle(ip);
+
+                    if (particle.StatusCode() == 1){
+                        particlePDG.push_back(particle.PdgCode());
+                        status_code.push_back(particle.StatusCode());
+                        particleMotherID.push_back(particle.Mother());
+                        particleTrackID.push_back(particle.TrackId());
+                        particleKE.push_back(particle.E() - particle.Mass());
+                        particleP.push_back(particle.P());
+                        particleE.push_back(particle.E());
+                        particlePx.push_back(particle.Px());
+                        particlePy.push_back(particle.Py());
+                        particlePz.push_back(particle.Pz());
+                        particle_interaction_index.push_back(interaction_idx);
+
+
+                        int m_pdg = -999;
+                        int m_id = particle.Mother();
+
+                        if (gen_track_to_pdg.count(m_id)) {
+                            m_pdg = gen_track_to_pdg[m_id];
+                        }
+                        particleMotherPDG.push_back(m_pdg);
+
+                    }
+
+                    
+                }
+                
+                // Geant4 Stage particles
+                std::vector<art::Ptr<simb::MCParticle>> associatedGeantParticles = geantAssns.at(truth_iter);
+                for (auto const& geant_part : associatedGeantParticles) {
+                    geant_PDG.push_back(geant_part->PdgCode());
+                    geant_TrackID.push_back(geant_part->TrackId());
+                    geant_MotherID.push_back(geant_part->Mother());
+
+                    geant_startX.push_back(geant_part->Vx());
+                    geant_startY.push_back(geant_part->Vy());
+                    geant_startZ.push_back(geant_part->Vz());
+
+                    geant_endX.push_back(geant_part->EndX());
+                    geant_endY.push_back(geant_part->EndY());
+                    geant_endZ.push_back(geant_part->EndZ());
+
+                    geant_P.push_back(geant_part->P());
+                    geant_Px.push_back(geant_part->Px());
+                    geant_Py.push_back(geant_part->Py());
+                    geant_Pz.push_back(geant_part->Pz());
+
+                    nu_g4_track_ids.insert(geant_part->TrackId());
+                }
+                interaction_idx++;
+                truth_iter++;
             }
         }
 
+        geant_HitsU.resize(geant_TrackID.size(), 0);
+        geant_HitsV.resize(geant_TrackID.size(), 0);
+        geant_HitsW.resize(geant_TrackID.size(), 0);
 
-        /*
-        ********************************************************
-        3. Slices & Tracks (Reco stuff)
-        ********************************************************
-        */
+        /* ********************************************************
+        Slicing, NuScores, and Hit Profiling
+        ******************************************************** */
+        auto sliceHandle = e.getValidHandle<std::vector<recob::Slice>>(fSliceLabel);
+        auto pfpHandle   = e.getValidHandle<std::vector<recob::PFParticle>>(fPFParticleLabel);
+        auto trackHandle = e.getValidHandle<std::vector<recob::Track>>(fTrackLabel);
 
-        // Get the Slices, PFParticles and tracks from the event
-        art::Handle<std::vector<recob::Slice>> sliceHandle; 
-        art::Handle<std::vector<recob::PFParticle>> pfpHandle;
-        art::Handle<std::vector<recob::Track>> trackHandle;
-
-        if (e.getByLabel(fSliceLabel, sliceHandle) && e.getByLabel(fPFParticleLabel, pfpHandle) && e.getByLabel(fTrackLabel, trackHandle)) {
+        art::FindManyP<recob::PFParticle> pfpsFromSlices(sliceHandle, e, fSliceLabel);
+        art::FindManyP<larpandoraobj::PFParticleMetadata> pfpMetadataAssoc(pfpHandle, e, fPFParticleLabel);
+        art::FindManyP<recob::PFParticle> pfpsFromTracks(trackHandle, e, fTrackLabel);
+        art::FindManyP<recob::Slice> slicesFromPFPs(pfpHandle, e, fPFParticleLabel);
+        art::FindManyP<recob::Hit> trackHitAssoc(trackHandle, e, fTrackLabel);
+        art::FindManyP<recob::Vertex> pfpVertexAssoc(pfpHandle, e, fPFParticleLabel);
         
-            fNSlices = sliceHandle->size();
+        std::unique_ptr<art::FindManyP<sbn::OpT0Finder>> opt0Assns;
+        try { opt0Assns = std::make_unique<art::FindManyP<sbn::OpT0Finder>>(sliceHandle, e, fOpT0Label); } catch(...) {}
 
-            // Find associations
-            // "Give me the PFParticles for each Slice"
-            art::FindManyP<recob::PFParticle> sliceToPFP(sliceHandle, e, fSliceLabel);
-            // "Give me the Metadata nuscore for each PFParticle"
-            art::FindManyP<larpandoraobj::PFParticleMetadata> pfpToMetadata(pfpHandle, e, fPFParticleLabel);
-            // "Give me the Track associated with this PFParticle"
-            art::FindManyP<recob::Track> pfpToTrack(pfpHandle, e, fTrackLabel);
-            art::FindManyP<recob::Shower> pfpToShower(pfpHandle, e, fPFParticleLabel);
-            // "Give me all the Hits that make up this Track"
-            art::FindManyP<recob::Hit> trackToHit(trackHandle, e, fTrackLabel);
-            // Give me all the vertices associated with this pfp
-            art::FindManyP<recob::Vertex> pfpToVertex(pfpHandle, e, fPFParticleLabel);
-            // Give me all the hits associated with this slice.
-            art::FindManyP<recob::Hit> sliceToHit(sliceHandle, e, fSliceLabel);
+        // Needed for purity/completeness calculations
+        art::FindManyP<recob::Hit> hitsFromSlices(sliceHandle, e, fSliceLabel);
 
-            art::FindManyP<sbn::CRUMBSResult> fmCrumbs(sliceHandle, e, fCrumbsLabel);
 
-            // slice loop
-            for (size_t i_slice = 0; i_slice < sliceHandle->size(); ++i_slice) {
-                
-                // Get all articles in this slice
-                std::vector<art::Ptr<recob::PFParticle>> sliceParticles = sliceToPFP.at(i_slice);
-                
-                bool isNeutrinoSlice = false;
+        art::Handle<std::vector<recob::Hit>> globalHitHandle;
+        
+        // Total true neutrino hits in the whole event. This is used to calculate the purity/completeness of each slice.
+        fEvent_TotalTrueNuHits = 0;
+        e.getByLabel(fHitLabel, globalHitHandle);
 
-                // Find parent and check if it is a neutrino
-                for (const art::Ptr<recob::PFParticle>& pfp : sliceParticles) {
+        std::map<int, size_t> sliceToNuPFP;
+
+        art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData> hitTruthAssns(globalHitHandle, e, "gaushitTruthMatch");
+
+        if (e.getByLabel(fHitLabel, globalHitHandle)) {
+
+            if (!hitTruthAssns.isValid()) {
+                mf::LogVerbatim("AnalyzeHyperon") << "WARNING: Could not find gaushitTruthMatch associations!";
+            } 
+            else {
+                // Loop over every reconstructed hit inside the entire event data block
+                for (size_t j = 0; j < globalHitHandle->size(); ++j) {
+                    art::Ptr<recob::Hit> hit(globalHitHandle, j);
+                    bool hit_belongs_to_nu = false;
                     
-                    float crumbs_score = -999.0;
-                    if (fmCrumbs.isValid() && fmCrumbs.at(i_slice).size() > 0) {
-                        crumbs_score = fmCrumbs.at(i_slice).front()->score;
-                    }
-                    SliceCRUMBSScore.push_back(crumbs_score);
-                    if (pfp->IsPrimary()) {
-                        
-                        // Pandora's guess
-                        fSliceParentPDG.push_back(pfp->PdgCode());
-                        
-                        // Fill nuScore
-                        float nuScore = -1.0; 
-                        std::vector<art::Ptr<larpandoraobj::PFParticleMetadata>> metadataVec = pfpToMetadata.at(pfp.key());
-                        
-                        if (!metadataVec.empty()) {
-                            const auto& propertiesMap = metadataVec.front()->GetPropertiesMap();
-                            if (propertiesMap.find("NuScore") != propertiesMap.end()) {
-                                nuScore = propertiesMap.at("NuScore");
-                            }
-                        }
-                        
-                        fSliceNuScore.push_back(nuScore);
+                    auto const& particles = hitTruthAssns.at(hit.key());
+                    std::set<int> counted_geant_indices;
 
-                        std::vector<art::Ptr<recob::Vertex>> vertices = pfpToVertex.at(pfp.key());
 
-                        if (!vertices.empty()) {
-                            fSliceVertexX.push_back(vertices.front()->position().X());
-                            fSliceVertexY.push_back(vertices.front()->position().Y());
-                            fSliceVertexZ.push_back(vertices.front()->position().Z());
-                        } else {
-                            // If Pandora failed to make a vertex, use a dummy value
-                            fSliceVertexX.push_back(-9999.0);
-                            fSliceVertexY.push_back(-9999.0);
-                            fSliceVertexZ.push_back(-9999.0);
-                        }
-
-                        int isTrueNu = 0;
+                    for (const auto& true_part : particles) {
+                        int current_id = std::abs(true_part->TrackId());
+                        const art::Ptr<simb::MCTruth> hitMCTruth = pi_serv->TrackIdToMCTruth_P(std::abs(true_part->TrackId()));
                         
-                        // Get all hits in this specific slice
-                        std::vector<art::Ptr<recob::Hit>> sliceHits = sliceToHit.at(i_slice);
-                        
-                        // Ask BackTracker for the Geant4 ID that contributed the most hits
-                        int g4id = TruthMatchUtils::TrueParticleIDFromTotalRecoHits(clockData, sliceHits, 1);
+                        // Check if its origin is our Beam Neutrino - if not, record this!
+                        if (hitMCTruth.isNonnull() && hitMCTruth->Origin() == simb::kBeamNeutrino) {
+                            hit_belongs_to_nu = true;
 
-                        // If a valid particle won the election
-                        if (TruthMatchUtils::Valid(g4id)) {
-                            // Trace it back to the event generator
-                            const art::Ptr<simb::MCTruth> truth = pi_serv->TrackIdToMCTruth_P(g4id);
-                            
-                            if (truth.isNonnull()) {
-                                // Was it generated as a beam neutrino?
-                                if (truth->Origin() == simb::kBeamNeutrino) {
-                                    isTrueNu = 1;
+                            // Climb the Geant4 family tree
+                            while (current_id > 0) {
+                                auto it = std::find(geant_TrackID.begin(), geant_TrackID.end(), current_id);
+                                if (it != geant_TrackID.end()) {
+                                    counted_geant_indices.insert(std::distance(geant_TrackID.begin(), it));
+                                    break; 
                                 }
-                            }
+                                const simb::MCParticle* part = pi_serv->TrackIdToParticle_P(current_id);
+                                if (part && part->Mother() != 0 && part->Mother() != current_id) {
+                                    current_id = std::abs(part->Mother());
+                                } else {
+                                    break; 
+                                }
+                            }   
                         }
-                        
-                        fSliceIsTrueNeutrino.push_back(isTrueNu);
-
-
-                        // Flag slice
-                        // This also rejects *clear* cosmics identified by pandora.
-                        // i.e. if code == 13, is clear cosmic.
-                        // We're rejecting that here.
-                        if (pfp->PdgCode()== 14 || pfp->PdgCode() == 12) {
-
-                            isNeutrinoSlice = true;
-
+                    }
+                    
+                    if (hit_belongs_to_nu) {
+                        fEvent_TotalTrueNuHits++;
+                        geo::View_t view = hit->View();
+                        for (int idx : counted_geant_indices) {
+                            if (view == geo::kU) geant_HitsU[idx]++;
+                            else if (view == geo::kV) geant_HitsV[idx]++;
+                            else if (view == geo::kW) geant_HitsW[idx]++;
                         }
-                        
-                        // We found the primary particle for this slice, so we can stop looking
-                        break; 
                     }
                 }
-                // Extract tracks if they are a neutrino slice
-                if (isNeutrinoSlice) {
-                    
-                    for (const art::Ptr<recob::PFParticle>& pfp : sliceParticles) {
-
-                        // Neutrinos don't have tracks
-                        if (pfp->IsPrimary()) continue;
-                        
-                        std::vector<art::Ptr<recob::Track>> tracks = pfpToTrack.at(pfp.key());
-
-                        if (!tracks.empty()) {
-                            const art::Ptr<recob::Track>& track = tracks.front();
-                            
-                            fNuTrackID.push_back(track->ID());
-                            fNuTrackStartX.push_back(track->Vertex().X());
-                            fNuTrackStartY.push_back(track->Vertex().Y());
-                            fNuTrackStartZ.push_back(track->Vertex().Z());
-
-                            // Find end of the nu slice tracks
-                            fNuTrackEndX.push_back(track->End().X());
-                            fNuTrackEndY.push_back(track->End().Y());
-                            fNuTrackEndZ.push_back(track->End().Z());
-
-                            fNuTrackLength.push_back(track->Length());
-                            // Only fill NTracks when slice is neutrino
-                            fNTracks++;
-
-                            // Back tracker
-                            int truePDG = 0;
-                            int trueMotherTrackID = 0;
-                            int trueTrackID = 0;
-                            std::vector<art::Ptr<recob::Hit>> trackHits = trackToHit.at(track.key());
-
-                            // Dom's utility
-                            int g4id = TruthMatchUtils::TrueParticleIDFromTotalRecoHits(clockData, trackHits, 1);
-
-                            // If a valid true particle won the election
-                            if (TruthMatchUtils::Valid(g4id)) {
-                                
-                                const simb::MCParticle* matched_mcparticle = pi_serv->ParticleList().at(g4id);
-                                
-                                if (matched_mcparticle) {
-                                    truePDG = matched_mcparticle->PdgCode();
-                                    trueMotherTrackID = matched_mcparticle->Mother();
-                                    trueTrackID = matched_mcparticle->TrackId();
-
-                                }
-                            }
-            
-                            fNuTrackTruePDG.push_back(truePDG);
-                            fNuTrackTrueMotherTrackID.push_back(trueMotherTrackID);
-                            fNuTrackTrueID.push_back(trueTrackID);
-
-                        }
-                        std::vector<art::Ptr<recob::Shower>> showers = pfpToShower.at(pfp.key());
-                        if(!showers.empty()){
-                            fNShowers++;
-                        }
-
-                    }
-                    if (fNTracks >= 2) {
-                        float pvX = fSliceVertexX.back();
-                        float pvY = fSliceVertexY.back();
-                        float pvZ = fSliceVertexZ.back();
-
-                        for (int i = 0; i < fNTracks; i++) {
-                            for (int j = i + 1; j < fNTracks; j++) {
-                                
-                                // Calculate how close their start points are
-                                float dx = fNuTrackStartX[i] - fNuTrackStartX[j];
-                                float dy = fNuTrackStartY[i] - fNuTrackStartY[j];
-                                float dz = fNuTrackStartZ[i] - fNuTrackStartZ[j];
-                                float trk_dist = std::sqrt(dx*dx + dy*dy + dz*dz);
-
-                                // Calculate the synthetic V0 vertex (midpoint)
-                                float v0_x = (fNuTrackStartX[i] + fNuTrackStartX[j]) / 2.0;
-                                float v0_y = (fNuTrackStartY[i] + fNuTrackStartY[j]) / 2.0;
-                                float v0_z = (fNuTrackStartZ[i] + fNuTrackStartZ[j]) / 2.0;
-
-                                // Calculate detachment from PV
-                                float dist_to_pv = std::sqrt(std::pow(v0_x - pvX, 2) +
-                                                             std::pow(v0_y - pvY, 2) +
-                                                             std::pow(v0_z - pvZ, 2));
-
-                                // SAVE EVERYTHING - :O
-                                fV0VertexX.push_back(v0_x);
-                                fV0VertexY.push_back(v0_y);
-                                fV0VertexZ.push_back(v0_z);
-                                fV0DistToPV.push_back(dist_to_pv);
-                                fV0TrackDist.push_back(trk_dist); 
-                                fV0Track1ID.push_back(fNuTrackID[i]);
-                                fV0Track2ID.push_back(fNuTrackID[j]);
-                                fNV0s++;
-                            }
-                        }
-                    }
-                    // Found neutrino slice
-                    break;
-                }
+            }
         }
-    }
+
+        for (size_t i = 0; i < sliceHandle->size(); ++i) {
+            art::Ptr<recob::Slice> slice(sliceHandle, i);
+            fSlice_ID.push_back(slice->ID());
+
+            float current_nu_score = -1.0;
+            float current_vtx_x = -999.0;
+            float current_vtx_y = -999.0;
+            float current_vtx_z = -999.0;
+            auto slicePFPs = pfpsFromSlices.at(i);
+
+            for (const auto& pfp : slicePFPs) {
+
+                if (pfp->IsPrimary() && std::abs(pfp->PdgCode()) == 14) {
+                    sliceToNuPFP[slice->ID()] = pfp->Self();
+                    auto metadataVec = pfpMetadataAssoc.at(pfp.key());
+                    for (const auto& metadata : metadataVec) {
+                        const auto& propertiesMap = metadata->GetPropertiesMap();
+                        if (propertiesMap.find("NuScore") != propertiesMap.end()) {
+                            current_nu_score = propertiesMap.at("NuScore");
+                        }
+                        // Some check for clear comsic needed - TJ
+                    }
+
+                    auto vertices = pfpVertexAssoc.at(pfp.key());
+                    if (!vertices.empty()) {
+                        double vtx[3];
+                        vertices.front()->XYZ(vtx);
+                        current_vtx_x = vtx[0];
+                        current_vtx_y = vtx[1];
+                        current_vtx_z = vtx[2];
+                    }
+
+                }
+            } // loop over pfps in slice
+
+
+            float current_opt0_score = -1.0;
+            if (opt0Assns && opt0Assns->isValid()) {
+                auto opt0s = opt0Assns->at(i);
+                if (!opt0s.empty()) {
+                    current_opt0_score = opt0s.front()->score;
+                }
+            }
+            fSlice_Opt0Score.push_back(current_opt0_score);
+
+            fSlice_NuScore.push_back(current_nu_score);
+            fSlice_VtxX.push_back(current_vtx_x);
+            fSlice_VtxY.push_back(current_vtx_y);
+            fSlice_VtxZ.push_back(current_vtx_z);
+            
+            // Profile hits within this slice
+            auto const& sliceHits = hitsFromSlices.at(i);
+            int total_slice_hits = sliceHits.size();
+            int true_nu_slice_hits = 0;
+            // Loop over every hit in the slice
+            for (const auto& hitPtr : sliceHits) {
+                bool hit_belongs_to_nu = false;
+                
+                if (hitTruthAssns.isValid()) {
+                    auto const& particles = hitTruthAssns.at(hitPtr.key());
+                    
+                    for (const auto& true_part : particles) {
+                        const art::Ptr<simb::MCTruth> hitMCTruth = pi_serv->TrackIdToMCTruth_P(std::abs(true_part->TrackId()));
+                        
+                        if (hitMCTruth.isNonnull() && hitMCTruth->Origin() == simb::kBeamNeutrino) {
+                            hit_belongs_to_nu = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (hit_belongs_to_nu) {
+                    true_nu_slice_hits++;
+                }
+            }
+
+            fSlice_TotalHits.push_back(total_slice_hits);
+            fSlice_TrueNuHits.push_back(true_nu_slice_hits);
+
+
+
+
+        } // loop over slices
+
+        /* ********************************************************
+        Track & Shower Reconstruction Diagnostics
+        ******************************************************** */
+        art::Handle<std::vector<recob::Shower>> showerHandle;
+        bool has_showers = e.getByLabel(fShowerLabel, showerHandle);
+
+        std::unique_ptr<art::FindManyP<anab::ParticleID>> trackPIDAssns;
+        trackPIDAssns = std::make_unique<art::FindManyP<anab::ParticleID>>(trackHandle, e, fPIDLabel); 
+
+        std::unique_ptr<art::FindManyP<recob::Hit>> showerHitAssoc;
+        std::unique_ptr<art::FindManyP<recob::PFParticle>> pfpsFromShowers;
+        
+        if (has_showers) {
+            showerHitAssoc = std::make_unique<art::FindManyP<recob::Hit>>(showerHandle, e, fShowerLabel);
+            pfpsFromShowers = std::make_unique<art::FindManyP<recob::PFParticle>>(showerHandle, e, fShowerLabel);
+        }
+
+        // Start track loop 
+        for (size_t i = 0; i < trackHandle->size(); ++i) {
+            art::Ptr<recob::Track> track(trackHandle, i);
+            fTrack_ID.push_back(track->ID());
+
+            // Export Track Geometry
+            fTrack_Length.push_back(track->Length());
+            fTrack_StartX.push_back(track->Vertex().X());
+            fTrack_StartY.push_back(track->Vertex().Y());
+            fTrack_StartZ.push_back(track->Vertex().Z());
+            fTrack_EndX.push_back(track->End().X());
+            fTrack_EndY.push_back(track->End().Y());
+            fTrack_EndZ.push_back(track->End().Z());
+
+            int best_geant_id = -999;
+            int max_hits = -1;
+            std::map<int, int> trackTruthMap;
+            auto trackHits = trackHitAssoc.at(i);
+
+            if (hitTruthAssns.isValid()) {
+                for (const auto& hitPtr : trackHits) {
+                    auto const& particles = hitTruthAssns.at(hitPtr.key());
+                    for (const auto& true_part : particles) {
+                        int current_id = std::abs(true_part->TrackId());
+                        // Climb the Geant4 family tree
+                        while (current_id > 0) {
+                            if (std::find(geant_TrackID.begin(), geant_TrackID.end(), current_id) != geant_TrackID.end()) {
+                                trackTruthMap[current_id]++;
+                                break; 
+                            }
+                            const simb::MCParticle* part = pi_serv->TrackIdToParticle_P(current_id);
+                            if (part && part->Mother() != 0 && part->Mother() != current_id) {
+                                current_id = std::abs(part->Mother());
+                            } else {
+                                break; 
+                            }
+                        }
+                    }
+                }
+            }
+            
+            for (auto const& [tid, count] : trackTruthMap) {
+                if (count > max_hits) { max_hits = count; best_geant_id = tid; }
+            }
+            fTrack_TrueGeantID.push_back(best_geant_id);
+
+            // PID extraction
+            float chi2_proton = -1.0;
+            float chi2_muon = -1.0;
+
+            if (trackPIDAssns && trackPIDAssns->isValid()) {
+                auto pids = trackPIDAssns->at(i);
+                float p_chi2_sum = 0; int p_chi2_n = 0;
+                float m_chi2_sum = 0; int m_chi2_n = 0;
+
+                std::cout<<"We are calculating pids :) "<<std::endl;
+                
+                for (auto const& pid : pids) {
+                    for (auto const& score : pid->ParticleIDAlgScores()) {
+                        if (score.fAlgName.find("Chi2") != std::string::npos && score.fValue > 0) {
+                            if (score.fAssumedPdg == 2212) {
+                                p_chi2_sum += score.fValue; p_chi2_n++;
+                            } else if (score.fAssumedPdg == 13) {
+                                m_chi2_sum += score.fValue; m_chi2_n++;
+                            }
+                        }
+                    }
+                }
+                if (p_chi2_n > 0) chi2_proton = p_chi2_sum / p_chi2_n;
+                if (m_chi2_n > 0) chi2_muon = m_chi2_sum / m_chi2_n;
+            }
+            fTrack_Chi2Proton.push_back(chi2_proton);
+            fTrack_Chi2Muon.push_back(chi2_muon);
+
+            float t_score = -1.0;
+            int slice_id = -999;
+            int is_primary = 0;
+            auto pfps = pfpsFromTracks.at(i);
+            
+            if (!pfps.empty()) {
+                auto metas = pfpMetadataAssoc.at(pfps.front().key());
+                if (!metas.empty() && metas.front()->GetPropertiesMap().count("TrackScore")) {
+                    t_score = metas.front()->GetPropertiesMap().at("TrackScore");
+                }
+                auto slices = slicesFromPFPs.at(pfps.front().key());
+                if (!slices.empty()){
+                    slice_id = slices.front()->ID();
+                    if (sliceToNuPFP.count(slice_id) && pfps.front()->Parent() == sliceToNuPFP[slice_id]) {
+                        is_primary = 1;
+                    }
+                
+                }
+            }
+            fTrack_TrackScore.push_back(t_score);
+            fTrack_SliceID.push_back(slice_id);
+            fTrack_IsPrimary.push_back(is_primary);
+        } // End track loop
+
+        // Shower loop
+        if (has_showers) {
+            for (size_t i = 0; i < showerHandle->size(); ++i) {
+                art::Ptr<recob::Shower> shower(showerHandle, i);
+                fShower_ID.push_back(shower->ID());
+
+                int best_geant_id = -999;
+                int max_hits = -1;
+                std::map<int, int> showerTruthMap;
+                auto showerHits = showerHitAssoc->at(i);
+
+                // FIX: Using hitTruthAssns pointer instead of broken HitToTrackIDEs!
+                if (hitTruthAssns.isValid()) {
+                    for (const auto& hitPtr : showerHits) {
+                        auto const& particles = hitTruthAssns.at(hitPtr.key());
+                        for (const auto& true_part : particles) {
+                            int current_id = std::abs(true_part->TrackId());
+                            while (current_id > 0) {
+                                if (std::find(geant_TrackID.begin(), geant_TrackID.end(), current_id) != geant_TrackID.end()) {
+                                    showerTruthMap[current_id]++;
+                                    break; 
+                                }
+                                const simb::MCParticle* part = pi_serv->TrackIdToParticle_P(current_id);
+                                if (part && part->Mother() != 0 && part->Mother() != current_id) {
+                                    current_id = std::abs(part->Mother());
+                                } else {
+                                    break; 
+                                }
+                            }
+                        }
+                    }
+                }
+                for (auto const& [tid, count] : showerTruthMap) {
+                    if (count > max_hits) { max_hits = count; best_geant_id = tid; }
+                }
+                fShower_TrueGeantID.push_back(best_geant_id);
+
+                float t_score = -1.0;
+                int slice_id = -999;
+                int is_primary = 0;
+                auto pfps = pfpsFromShowers->at(i);
+                
+                if (!pfps.empty()) {
+                    auto metas = pfpMetadataAssoc.at(pfps.front().key());
+                    if (!metas.empty() && metas.front()->GetPropertiesMap().count("TrackScore")) {
+                        t_score = metas.front()->GetPropertiesMap().at("TrackScore");
+                    }
+                    auto slices = slicesFromPFPs.at(pfps.front().key());
+                    if (!slices.empty()){
+                        slice_id = slices.front()->ID();
+                        if (sliceToNuPFP.count(slice_id) && pfps.front()->Parent() == sliceToNuPFP[slice_id]) {
+                            is_primary = 1;
+                        }
+                    }
+                }
+                fShower_TrackScore.push_back(t_score);
+                fShower_SliceID.push_back(slice_id);
+                fShower_IsPrimary.push_back(is_primary);
+            }
+        } // End shower loop
+
         
         fTree->Fill();
     }
-    // Runs at the end of every subrun? 
+    
     void AnalyzeHyperon::endSubRun(art::SubRun const& sr) {
-        
         fRun_sr = sr.run();
         fSubRun_sr = sr.subRun();
         fPOT = 0.0;
 
-        // In MC, the POT summary is generated by the event generator ("generator")
         art::Handle<sumdata::POTSummary> potHandle;
         if (sr.getByLabel("generator", potHandle)) {
             fPOT = potHandle->totpot;
         } else {
-            // Safeguard for good C++'ing
-            std::cout << "Warning: No POTSummary found in this SubRun!" << std::endl;
+            mf::LogVerbatim("AnalyzeHyperon") << "Warning: No POTSummary found in this SubRun!";
         }
 
         fSubRunTree->Fill();
     } 
+
     DEFINE_ART_MODULE(AnalyzeHyperon)
 }

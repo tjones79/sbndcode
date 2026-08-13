@@ -3,13 +3,13 @@
 # ==========================================
 # Background Paths
 # ==========================================
-export HYPERON_BG_INPUT="/data/tjones9/SBND/2026_production" 
+export HYPERON_BG_INPUT="/data/sbnd/prod_2026" 
 export HYPERON_BG_OUTPUT="/data/tjones9/sbnd/hyperons/hyperon_analyser_output/2026_production"
 
 # ==========================================
 # Signal Paths
 # ==========================================
-export HYPERON_SIG_INPUT="/data/sbnd/hyperons_new/*batch*"
+export HYPERON_SIG_INPUT="/data/sbnd/hyperons_numu/*batch"
 # Mirrors the batch structure into your main output directory
 export HYPERON_SIG_OUTPUT="/data/tjones9/sbnd/hyperons/hyperon_analyser_output/filtered_hyperons"
 
