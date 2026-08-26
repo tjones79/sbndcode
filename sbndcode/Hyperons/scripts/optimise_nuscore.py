@@ -58,15 +58,15 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
     nx, ny = 50, 50
     h2_sig = ROOT.TH2F("h2_sig", "True #Lambda^{0} Signal;Max NuScore in Event;Optical Flash Match Score (OpT0)", nx, 0, 1.0, ny, 0, 500)
     h2_bkg = ROOT.TH2F("h2_bkg", "Total Background;Max NuScore in Event;Optical Flash Match Score (OpT0)", nx, 0, 1.0, ny, 0, 500)
-    h2_cosmic = ROOT.TH2F("h2_cosmic", "Pure Cosmics / Dirt Only;Max NuScore in Event;Optical Flash Match Score (OpT0)", nx, 0, 1.0, ny, 0, 500)
+    h2_cosmic = ROOT.TH2F("h2_cosmic", "Pure Cosmics (True Origin = 2);Max NuScore in Event;Optical Flash Match Score (OpT0)", nx, 0, 1.0, ny, 0, 500)
     
     h1_nu_sig = ROOT.TH1F("h1_nu_sig", "Signal", nx, 0, 1.0)
-    h1_nu_beam = ROOT.TH1F("h1_nu_beam", "Beam Background", nx, 0, 1.0)
-    h1_nu_cosmic = ROOT.TH1F("h1_nu_cosmic", "Cosmics / Dirt", nx, 0, 1.0)
+    h1_nu_beam = ROOT.TH1F("h1_nu_beam", "Beam Background & Dirt", nx, 0, 1.0)
+    h1_nu_cosmic = ROOT.TH1F("h1_nu_cosmic", "Pure Cosmics", nx, 0, 1.0)
     
     h1_opt0_sig = ROOT.TH1F("h1_opt0_sig", "Signal", ny, 0, 500)
-    h1_opt0_beam = ROOT.TH1F("h1_opt0_beam", "Beam Background", ny, 0, 500)
-    h1_opt0_cosmic = ROOT.TH1F("h1_opt0_cosmic", "Cosmics / Dirt", ny, 0, 500)
+    h1_opt0_beam = ROOT.TH1F("h1_opt0_beam", "Beam Background & Dirt", ny, 0, 500)
+    h1_opt0_cosmic = ROOT.TH1F("h1_opt0_cosmic", "Pure Cosmics", ny, 0, 500)
     
     for h in [h1_nu_sig, h1_opt0_sig]:
         h.SetFillColor(ROOT.kAzure+1)
@@ -80,7 +80,6 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
     
     base_signal = 0
     base_bkg = 0
-    base_cosmic = 0
 
     print("Processing Signal Sample (Extracting Signal in FV)...")
     f_sig = ROOT.TFile.Open(signal_file, "READ")
@@ -126,10 +125,6 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
             continue 
             
         base_bkg += 1
-        
-        is_cosmic = not pass_true_fv(t_bkg)
-        if is_cosmic:
-            base_cosmic += 1
             
         best_idx = -1
         max_nu = -1.0
@@ -140,14 +135,19 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
                 
         if best_idx >= 0 and pass_reco_fv(t_bkg, best_idx):
             opt0 = t_bkg.slice_Opt0Score[best_idx]
+            
+            is_cosmic = False
+            origin_array = getattr(t_bkg, "slice_TrueOrigin", [])
+            if len(origin_array) > best_idx and origin_array[best_idx] == 2:
+                is_cosmic = True
+            
             h2_bkg.Fill(max_nu, opt0, bkg_scale)
+            
             if is_cosmic:
                 h2_cosmic.Fill(max_nu, opt0, bkg_scale)
-                # NEW: Fill 1D Cosmic
                 h1_nu_cosmic.Fill(max_nu, bkg_scale)
                 h1_opt0_cosmic.Fill(opt0, bkg_scale)
             else:
-                # NEW: Fill 1D Beam Background
                 h1_nu_beam.Fill(max_nu, bkg_scale)
                 h1_opt0_beam.Fill(opt0, bkg_scale)
             
@@ -155,7 +155,6 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
 
     base_sig_scaled = base_signal * sig_scale
     base_bkg_scaled = base_bkg * bkg_scale
-    base_cosmic_scaled = base_cosmic * bkg_scale
     
     results = []
     
@@ -175,8 +174,6 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
             
             sig_cosmic = S / math.sqrt(S + C) if (S + C) > 0 else 0
             
-            cosmic_rej = (1.0 - (C / base_cosmic_scaled)) * 100 if base_cosmic_scaled > 0 else 0
-            
             h2_significance.SetBinContent(i, j, sig_cosmic)
             
             results.append({
@@ -187,8 +184,7 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
                 "C_surv": C,
                 "eff": eff * 100,
                 "pur": pur * 100,
-                "sig_cosmic": sig_cosmic,
-                "crej": cosmic_rej
+                "sig_cosmic": sig_cosmic
             })
 
     # Sort by the new Cosmic-only Significance
@@ -197,20 +193,15 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
     print("\n" + "="*115)
     print(" TOP 10 PRE-SELECTION COMBINATIONS (Ranked by Cosmic-Only Significance)")
     print("="*115)
-    print(f" {'NuScore >':<10} | {'OpT0 >':<8} | {'Signal':<8} | {'Total Bkg':<10} | {'Sig Eff %':<10} | {'Bkg Rej %':<10} | {'Cosmic Sig':<12} | {'Cosmics Cut %':<15}")
+    print(f" {'NuScore >':<10} | {'OpT0 >':<8} | {'Signal':<8} | {'Total Bkg':<10} | {'Sig Eff %':<10} | {'Cosmics Surv':<12} | {'Cosmic Sig':<12}")
     print("-" * 115)
     
     for res in results[:10]:
-        bkg_rej = (1.0 - (res['B'] / base_bkg_scaled)) * 100
-        print(f" {res['nu']:<10.2f} | {res['opt0']:<8.1f} | {res['S']:<8.1f} | {res['B']:<10.1f} | {res['eff']:<10.2f} | {bkg_rej:<10.2f} | {res['sig_cosmic']:<12.2f} | {res['crej']:<15.2f}")
+        print(f" {res['nu']:<10.2f} | {res['opt0']:<8.1f} | {res['S']:<8.1f} | {res['B']:<10.1f} | {res['eff']:<10.2f} | {res['C_surv']:<12.1f} | {res['sig_cosmic']:<12.2f}")
         
     print("\n" + "="*115)
-    print(f" RAW COSMIC STATISTICS (Scaled to {target_pot:.0e} POT)")
-    print("="*115)
-    print(f" Total Baseline Cosmics/Dirt entering detector : {base_cosmic_scaled:,.1f}")
     best = results[0]
-    print(f" Cosmics Surviving optimal 2D cut            : {best['C_surv']:,.1f}")
-    print(f" Absolute Cosmic Rejection Rate              : {best['crej']:.3f} %")
+    print(f" Optimal 2D Cut: NuScore > {best['nu']:.2f}, OpT0 > {best['opt0']:.0f}")
     print("="*115 + "\n")
 
     c1 = ROOT.TCanvas("c1", "2D Pre-Selection Optimization", 1800, 1200)
@@ -292,8 +283,8 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
     leg_nu = ROOT.TLegend(0.40, 0.70, 0.88, 0.88)
     leg_nu.SetBorderSize(0)
     leg_nu.AddEntry(h1_nu_sig, "True #Lambda^{0} Signal", "l")
-    leg_nu.AddEntry(h1_nu_beam, "Beam Background", "l")
-    leg_nu.AddEntry(h1_nu_cosmic, "Cosmics / Dirt", "l")
+    leg_nu.AddEntry(h1_nu_beam, "Beam Background & Dirt", "l")
+    leg_nu.AddEntry(h1_nu_cosmic, "Pure Cosmics (Origin=2)", "l")
     leg_nu.AddEntry(l_nu, f"Chosen Cut (> {chosen_nu})", "l")
     leg_nu.Draw()
 
@@ -318,8 +309,8 @@ def run_2d_optimization(signal_file, bkg_file, target_pot=1e21):
     leg_opt0 = ROOT.TLegend(0.40, 0.70, 0.88, 0.88)
     leg_opt0.SetBorderSize(0)
     leg_opt0.AddEntry(h1_opt0_sig, "True #Lambda^{0} Signal", "l")
-    leg_opt0.AddEntry(h1_opt0_beam, "Beam Background", "l")
-    leg_opt0.AddEntry(h1_opt0_cosmic, "Cosmics / Dirt", "l")
+    leg_opt0.AddEntry(h1_opt0_beam, "Beam Background & Dirt", "l")
+    leg_opt0.AddEntry(h1_opt0_cosmic, "Pure Cosmics (Origin=2)", "l")
     leg_opt0.AddEntry(l_opt0, f"Chosen Cut (> {chosen_opt0:.0f})", "l")
     leg_opt0.Draw()
 

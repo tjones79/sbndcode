@@ -13,8 +13,16 @@ def pass_true_fv(tree):
         return in_x and in_y and in_z
     return False
 
-def get_category(tree):
-    """Categorises the event into Signal, Cosmic/Dirt, or specific beam backgrounds."""
+def get_category(tree, context):
+    """Categorises the event/slice into Signal, Cosmic, Dirt, or specific beam backgrounds."""
+    
+    slice_idx = context.get("primary_slice_idx")
+    if slice_idx is not None and hasattr(tree, "slice_TrueOrigin"):
+        # Origin 2 = kCosmicRay (CORSIKA)
+        if tree.slice_TrueOrigin[slice_idx] == 2:
+            return "Cosmic"
+
+    # (Used for baseline counts, or if the slice was genuinely from the Beam)
     in_fv = pass_true_fv(tree)
     is_signal = (getattr(tree, "IsAssocLambdaKPlusWithProtonPiMinus", 0) == 1)
     
@@ -22,9 +30,9 @@ def get_category(tree):
         return "Signal"
         
     if not in_fv:
-        return "Cosmic/Dirt"
+        return "Dirt" 
         
-    # If it is in the FV but isn't signal, it's a Beam Background. Identify the mode!
+    #  If it is in the FV but isn't signal, it's a Beam Background. Identify the mode!
     mode = -1
     if hasattr(tree, "nu_numode") and len(tree.nu_numode) > 0:
         mode = tree.nu_numode[0]
@@ -45,7 +53,7 @@ class SelectionEngine:
         self.base_stage_name = "0. Generated (True Signal in FV)"
         
         self.categories = [
-            "Signal", "Cosmic/Dirt", "Beam_QE", "Beam_RES", 
+            "Signal", "Cosmic", "Dirt", "Beam_QE", "Beam_RES", 
             "Beam_DIS", "Beam_MEC", "Beam_COH", "Beam_Other"
         ]
 
@@ -166,13 +174,13 @@ class SelectionEngine:
         print("="*128)
         print(" DETAILED BACKGROUND BREAKDOWN (Expected Events Scaled to POT)")
         print("="*128)
-        print(f" {'Selection Stage':<35} | {'Cosmic/Dirt':<12} | {'Beam QE':<10} | {'Beam RES':<10} | {'Beam DIS':<10} | {'Beam MEC':<10} | {'Beam COH':<10} | {'Other':<10}")
+        print(f" {'Selection Stage':<35} | {'Cosmic':<12} | {'Dirt':<12} | {'Beam QE':<10} | {'Beam RES':<10} | {'Beam DIS':<10} | {'Beam MEC':<10} | {'Beam COH':<10} | {'Other':<10}")
         print("-" * 128)
         
         stage_names = [self.base_stage_name] + [s["name"] for s in self.stages]
         for name in stage_names:
             r = self.results[name]
-            print(f" {name:<35} | {r['scaled_Cosmic/Dirt']:<12.1f} | {r['scaled_Beam_QE']:<10.1f} | {r['scaled_Beam_RES']:<10.1f} | {r['scaled_Beam_DIS']:<10.1f} | {r['scaled_Beam_MEC']:<10.1f} | {r['scaled_Beam_COH']:<10.1f} | {r['scaled_Beam_Other']:<10.1f}")
+            print(f" {name:<35} | {r['scaled_Cosmic']:<12.1f} | {r['scaled_Dirt']:<12.1f}  | {r['scaled_Beam_QE']:<10.1f} | {r['scaled_Beam_RES']:<10.1f} | {r['scaled_Beam_DIS']:<10.1f} | {r['scaled_Beam_MEC']:<10.1f} | {r['scaled_Beam_COH']:<10.1f} | {r['scaled_Beam_Other']:<10.1f}")
         print("="*128 + "\n")
 
     def plot_detailed_cutflow(self, output_tag="cutflow_detailed"):
@@ -188,7 +196,8 @@ class SelectionEngine:
         hs = ROOT.THStack("hs", f"Associated Hyperon Selection Cut-Flow (Scaled to {self.target_pot:.0e} POT);;Expected Events")
         
         colors = {
-            "Cosmic/Dirt": ROOT.kGray+1,
+            "Cosmic": ROOT.kYellow+1,
+            "Dirt": ROOT.kGray+1,
             "Beam_Other": ROOT.kGray+2,
             "Beam_COH": ROOT.kRed+2,
             "Beam_QE": ROOT.kAzure+2,
@@ -211,7 +220,7 @@ class SelectionEngine:
                 h_dict[cat].SetBinContent(i+1, self.results[name]["scaled_" + cat])
                 
         # Stack from bottom to top
-        stack_order = ["Cosmic/Dirt", "Beam_Other", "Beam_COH", "Beam_QE", "Beam_MEC", "Beam_RES", "Beam_DIS", "Signal"]
+        stack_order = ["Cosmic", "Dirt", "Beam_Other", "Beam_COH", "Beam_QE", "Beam_MEC", "Beam_RES", "Beam_DIS", "Signal"]
         for cat in stack_order:
             hs.Add(h_dict[cat])
             

@@ -142,6 +142,7 @@ namespace hyperon {
         std::vector<float> fSlice_NuScore;
         std::vector<int>   fSlice_TotalHits;
         std::vector<int>   fSlice_TrueNuHits;
+        std::vector<int>   fSlice_TrueOrigin;
         int                fEvent_TotalTrueNuHits; 
 
 
@@ -241,6 +242,7 @@ namespace hyperon {
         fTree->Branch("slice_NuScore", &fSlice_NuScore);
         fTree->Branch("slice_TotalHits", &fSlice_TotalHits);
         fTree->Branch("slice_TrueNuHits", &fSlice_TrueNuHits);
+        fTree->Branch("slice_TrueOrigin", &fSlice_TrueOrigin);
         fTree->Branch("event_TotalTrueNuHits", &fEvent_TotalTrueNuHits, "event_TotalTrueNuHits/I");
 
         fTree->Branch("slice_VtxX", &fSlice_VtxX);
@@ -337,6 +339,7 @@ namespace hyperon {
         fSlice_NuScore.clear();
         fSlice_TotalHits.clear();
         fSlice_TrueNuHits.clear();
+        fSlice_TrueOrigin.clear();
         fEvent_TotalTrueNuHits = 0;
 
         fTrack_ID.clear();
@@ -607,6 +610,8 @@ namespace hyperon {
             auto const& sliceHits = hitsFromSlices.at(i);
             int total_slice_hits = sliceHits.size();
             int true_nu_slice_hits = 0;
+
+            std::map<int, int> origin_votes;
             // Loop over every hit in the slice
             for (const auto& hitPtr : sliceHits) {
                 bool hit_belongs_to_nu = false;
@@ -616,10 +621,15 @@ namespace hyperon {
                     
                     for (const auto& true_part : particles) {
                         const art::Ptr<simb::MCTruth> hitMCTruth = pi_serv->TrackIdToMCTruth_P(std::abs(true_part->TrackId()));
-                        
-                        if (hitMCTruth.isNonnull() && hitMCTruth->Origin() == simb::kBeamNeutrino) {
-                            hit_belongs_to_nu = true;
-                            break;
+
+
+                        if (hitMCTruth.isNonnull()) {
+                            int hit_origin = static_cast<int>(hitMCTruth->Origin());
+                            origin_votes[hit_origin]++;
+
+                            if (hit_origin == simb::kBeamNeutrino) {
+                                hit_belongs_to_nu = true;
+                            }
                         }
                     }
                 }
@@ -629,8 +639,18 @@ namespace hyperon {
                 }
             }
 
+            int best_origin = 0; // 0 = Unknown
+            int max_votes = -1;
+            for (auto const& [origin_type, count] : origin_votes) {
+                if (count > max_votes) {
+                    max_votes = count;
+                    best_origin = origin_type;
+                }
+            }
+
             fSlice_TotalHits.push_back(total_slice_hits);
             fSlice_TrueNuHits.push_back(true_nu_slice_hits);
+            fSlice_TrueOrigin.push_back(best_origin);
 
 
 
